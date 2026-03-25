@@ -24,9 +24,6 @@ jobs:
             args: ''
 
     runs-on: ${{ matrix.platform }}
-    defaults:
-      run:
-        working-directory: skylarkdb
     steps:
       - uses: actions/checkout@v4
 
@@ -47,9 +44,11 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: install frontend dependencies
+        working-directory: ./skylarkdb
         run: npm install
 
-      - uses: tauri-apps/tauri-action@v0
+      - name: build tauri
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
