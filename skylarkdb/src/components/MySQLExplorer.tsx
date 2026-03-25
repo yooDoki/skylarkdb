@@ -8,9 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import {
   Database, Table2, Search, Play, RefreshCw, ChevronRight, ChevronDown,
-  Key, Hash, Type, Calendar, Zap, FileCode, Clock, ChevronLeft, ArrowLeft,
-  Loader2
+  Key, Hash, Type, Calendar, Zap, FileCode, ChevronLeft, ArrowLeft,
+  Loader2, Plus, Edit2, Trash2
 } from 'lucide-react';
+import { DataEditForm } from './DataEditForm';
 import { cn } from '@/utils/cn';
 import { getMySQLTableData, executeMySQLQuery, getMySQLTables } from '@/utils/api';
 
@@ -36,6 +37,12 @@ export function MySQLExplorer() {
   const [viewingTable, setViewingTable] = useState<string | null>(null);
   const [clickTimer, setClickTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [pendingTable, setPendingTable] = useState<string | null>(null);
+
+  // Form editing states
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
+  const [editingRow, setEditingRow] = useState<Record<string, any> | undefined>(undefined);
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
 
   const tableCache = useRef<Map<string, TableCache>>(new Map());
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -169,13 +176,10 @@ export function MySQLExplorer() {
     }
 
     setPendingTable(tableName);
-
-    requestAnimationFrame(() => {
-      setViewingTable(tableName);
-      setCurrentPage(0);
-      setTableData(null);
-      setPendingTable(null);
-    });
+    setViewingTable(tableName);
+    setCurrentPage(0);
+    // Don't clear tableData here, let the useEffect load new data
+    setPendingTable(null);
   }, [clickTimer]);
 
   const handleCloseTableView = useCallback(() => {
@@ -214,6 +218,47 @@ export function MySQLExplorer() {
     }
     setLoading(false);
   }, [query, activeConnection.connection?.id]);
+
+  // Form editing handlers
+  const handleOpenCreateForm = useCallback(() => {
+    if (!viewingTable) return;
+    setFormMode('create');
+    setEditingRow(undefined);
+    setIsFormOpen(true);
+  }, [viewingTable]);
+
+  const handleOpenEditForm = useCallback((row: Record<string, any>, index: number) => {
+    if (!viewingTable) return;
+    setFormMode('edit');
+    setEditingRow(row);
+    setSelectedRowIndex(index);
+    setIsFormOpen(true);
+  }, [viewingTable]);
+
+  const handleCloseForm = useCallback(() => {
+    setIsFormOpen(false);
+    setEditingRow(undefined);
+    setSelectedRowIndex(null);
+  }, []);
+
+  const handleFormSubmit = useCallback(async (data: Record<string, any>) => {
+    if (!viewingTable || !activeConnection.connection?.id) return;
+
+    try {
+      // TODO: Implement actual API calls for insert/update
+      console.log('Form submitted:', { mode: formMode, table: viewingTable, data });
+
+      // For now, just reload the table data
+      if (viewingTable) {
+        await loadTableData(viewingTable, currentPage);
+      }
+
+      handleCloseForm();
+    } catch (error) {
+      console.error('Form submission failed:', error);
+      throw error;
+    }
+  }, [viewingTable, activeConnection.connection?.id, formMode, currentPage, loadTableData, handleCloseForm]);
 
   const getColumnIcon = useCallback((column: MySQLColumn) => {
     if (column.extra.includes('auto_increment') || column.name === 'id') {
@@ -385,6 +430,14 @@ export function MySQLExplorer() {
                     </div>
                   )}
                   <Button
+                    size="sm"
+                    onClick={handleOpenCreateForm}
+                    className="h-8 bg-mysql hover:bg-mysql/90 text-white"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    新增
+                  </Button>
+                  <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => loadTableData(viewingTable, currentPage)}
@@ -413,13 +466,19 @@ export function MySQLExplorer() {
                               {col}
                             </TableHead>
                           ))}
+                          <TableHead className="font-semibold text-xs whitespace-nowrap w-[100px] text-center">
+                            操作
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {tableData.rows.map((row, idx) => (
                           <TableRow
                             key={idx}
-                            className="hover:bg-muted/30 transition-colors"
+                            className={cn(
+                              "transition-colors",
+                              selectedRowIndex === idx ? "bg-mysql/10" : "hover:bg-muted/30"
+                            )}
                           >
                             {tableData.columns.map((col) => (
                               <TableCell key={col} className="text-sm font-mono max-w-[200px] truncate">
@@ -432,6 +491,25 @@ export function MySQLExplorer() {
                                 )}
                               </TableCell>
                             ))}
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleOpenEditForm(row, idx)}
+                                  className="h-7 w-7 hover:bg-mysql/10 hover:text-mysql"
+                                >
+                                  <Edit2 className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -549,68 +627,22 @@ export function MySQLExplorer() {
                 </div>
               </CardContent>
             </Card>
-
-            {/* Query Results */}
-            {tableData && (
-              <Card className="flex-1 overflow-hidden shadow-card border-border/50 transition-all duration-200 flex flex-col">
-                <CardHeader className="pb-3 border-b flex-shrink-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-green-500/10">
-                        <Clock className="h-4 w-4 text-green-500" />
-                      </div>
-                      <CardTitle className="text-sm font-semibold">查询结果</CardTitle>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs">
-                      <Badge variant="secondary" className="font-mono">
-                        {tableData.rows.length} 行
-                      </Badge>
-                      <span className="text-muted-foreground">
-                        {tableData.executionTime.toFixed(3)}s
-                      </span>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="overflow-auto p-0 flex-1">
-                  <div className="min-h-full">
-                    <Table className="min-h-full">
-                      <TableHeader className="bg-muted/50 sticky top-0 z-10">
-                      <TableRow>
-                        {tableData.columns.map((col) => (
-                          <TableHead key={col} className="font-semibold text-xs">
-                            {col}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {tableData.rows.map((row, idx) => (
-                        <TableRow
-                          key={idx}
-                          className="hover:bg-muted/30 transition-colors"
-                        >
-                          {tableData.columns.map((col) => (
-                            <TableCell key={col} className="text-sm font-mono max-w-[200px] truncate">
-                              {row[col] === null ? (
-                                <span className="text-muted-foreground italic">NULL</span>
-                              ) : typeof row[col] === 'object' ? (
-                                JSON.stringify(row[col])
-                              ) : (
-                                String(row[col])
-                              )}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </>
         )}
       </div>
+
+      {/* Data Edit Form Modal */}
+      {viewingTable && tableColumns.has(viewingTable) && (
+        <DataEditForm
+          isOpen={isFormOpen}
+          onClose={handleCloseForm}
+          onSubmit={handleFormSubmit}
+          columns={tableColumns.get(viewingTable) || []}
+          initialData={editingRow}
+          tableName={viewingTable}
+          mode={formMode}
+        />
+      )}
     </div>
   );
 }

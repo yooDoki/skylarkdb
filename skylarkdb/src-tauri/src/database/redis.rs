@@ -150,7 +150,8 @@ pub async fn get_value(connection_id: &str, key: &str) -> Result<String, String>
         .map_err(|e| format!("Failed to get connection: {}", e))?;
 
     // Get the type of the key
-    let key_type: String = con.get(key).await.unwrap_or_else(|_| "none".to_string());
+    let key_type: String = redis::cmd("TYPE").arg(key).query_async(&mut con).await
+        .unwrap_or_else(|_| "none".to_string());
     
     let value = match key_type.as_str() {
         "string" => {
