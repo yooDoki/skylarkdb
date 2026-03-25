@@ -1,32 +1,3 @@
-需要查看项目的根目录结构，以获取更多关于项目的信息，包括技术栈、依赖等。
-        
-            
-toolName: view_folder
-            
-status: success
-          
-/Users/tunan/Documents/开发/开发/skylarkdb
-          
-需要查看项目的关键配置文件，包括package.json和README.md，以了解项目的技术栈和功能。
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: /Users/tunan/Documents/开发/开发/skylarkdb/skylarkdb/package.json
-          
-需要查看README.md文件，了解项目的详细描述和功能。
-        
-            
-toolName: view_files
-            
-status: success
-          
-            
-filePath: /Users/tunan/Documents/开发/开发/skylarkdb/skylarkdb/README.md
-          
 # SkylarkDB 项目描述
 
 ## 项目概述
