@@ -1,4 +1,4 @@
-name: Release
+name: 'publish'
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
+  publish-tauri:
     permissions:
       contents: write
     strategy:
@@ -44,18 +44,16 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: install frontend dependencies
-        working-directory: ./skylarkdb
-        run: npm install
+        run: cd skylarkdb && npm install
 
-      - name: build tauri
-        uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: ./skylarkdb
-          tagName: ${{ github.ref_name }}
-          releaseName: 'SkylarkDB ${{ github.ref_name }}'
-          releaseBody: 'See the assets to download and install this version.'
+          projectPath: skylarkdb
+          tagName: app-v__VERSION__
+          releaseName: 'App v__VERSION__'
+          releaseBody: 'See the assets to download this version.'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
