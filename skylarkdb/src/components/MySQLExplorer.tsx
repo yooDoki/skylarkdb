@@ -351,8 +351,8 @@ export function MySQLExplorer() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col gap-4 min-w-0">
         {viewingTable ? (
-          <Card className="flex-1 overflow-hidden shadow-card border-border/50 transition-all duration-200">
-            <CardHeader className="pb-3 border-b bg-muted/30">
+          <Card className="flex-1 overflow-hidden shadow-card border-border/50 transition-all duration-200 flex flex-col">
+            <CardHeader className="pb-3 border-b bg-muted/30 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Button
