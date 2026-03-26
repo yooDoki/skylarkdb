@@ -55,17 +55,17 @@
       "timestampUrl": ""
     }
   },
-  "updater": {
-    "active": true,
-    "endpoints": [
-      "https://github.com/yourusername/skylarkdb/releases/latest/download/latest.json"
-    ],
-    "dialog": true,
-    "pubkey": "your-public-key-here"
-  },
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/yooDoki/skylarkdb/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "your-public-key-here"
     }
   }
 }
