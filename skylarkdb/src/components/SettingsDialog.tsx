@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from './ui/dialog';
 import { UpdateChecker } from './UpdateChecker';
-import { Settings, Info, X } from 'lucide-react';
+import { Settings, Info } from 'lucide-react';
 
 export function SettingsDialog() {
   const [open, setOpen] = useState(false);
