@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { ConnectionList } from '@/components/ConnectionList';
 import { MySQLExplorer } from '@/components/MySQLExplorer';
 import { RedisExplorer } from '@/components/RedisExplorer';
+import { SettingsDialog } from '@/components/SettingsDialog';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { useSidebarStore } from '@/stores/sidebarStore';
 import { Button } from '@/components/ui/button';
-import { UpdateChecker } from '@/components/UpdateChecker';
 import { cn } from '@/utils/cn';
 import { Database, Server, Moon, Sun, Sparkles, ChevronRight, Terminal } from 'lucide-react';
 
@@ -58,15 +58,16 @@ function App() {
               <Terminal className="h-4 w-4" />
             </Button>
           )}
-          <UpdateChecker />
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleDarkMode}
             className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
+            title="切换主题"
           >
             {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
+          <SettingsDialog />
         </div>
       </header>
 

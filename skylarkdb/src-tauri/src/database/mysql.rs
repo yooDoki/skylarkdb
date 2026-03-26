@@ -1153,13 +1153,8 @@ pub async fn execute_query(
                 format!("USE 失败: {}", msg)
             }
         })?;
-    } else {
-        // 检查查询是否需要数据库
-        let trimmed = query.trim_start();
-        if mysql_query_returns_rows(trimmed) {
-            return Err("error returned from database: 1046 (3D000): No database selected — 提示：请在连接里填写「数据库」名，或在 SQL 中使用 `库名.表名`。".to_string());
-        }
     }
+    // 注意：如果没有默认数据库，用户仍可使用 `库名.表名` 格式执行跨库查询
 
     let mut q = sqlx::query(query);
     for p in param_slice {

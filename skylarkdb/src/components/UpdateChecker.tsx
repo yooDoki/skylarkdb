@@ -2,26 +2,28 @@ import { useState, useEffect } from 'react';
 import { check, Update } from '@tauri-apps/plugin-updater';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
+import { RefreshCw, Download } from 'lucide-react';
 
 export function UpdateChecker() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<Update | null>(null);
   const [isChecking, setIsChecking] = useState(false);
-
-  useEffect(() => {
-    checkForUpdates();
-  }, []);
+  const [checkResult, setCheckResult] = useState<string>('');
 
   const checkForUpdates = async () => {
     setIsChecking(true);
+    setCheckResult('');
     try {
       const update = await check();
       if (update) {
         setUpdateAvailable(true);
         setUpdateInfo(update);
+      } else {
+        setCheckResult('当前已是最新版本');
       }
     } catch (error) {
       console.error('检查更新失败:', error);
+      setCheckResult('检查失败，请稍后重试');
     } finally {
       setIsChecking(false);
     }
@@ -43,13 +45,25 @@ export function UpdateChecker() {
 
   return (
     <>
-      <Button 
-        onClick={checkForUpdates} 
-        disabled={isChecking}
-        className="ml-2"
-      >
-        {isChecking ? '检查中...' : '检查更新'}
-      </Button>
+      <div className="flex items-center gap-2">
+        {checkResult && (
+          <span className="text-xs text-muted-foreground">{checkResult}</span>
+        )}
+        <Button 
+          variant="outline"
+          size="sm"
+          onClick={checkForUpdates} 
+          disabled={isChecking}
+          className="h-7 text-xs"
+        >
+          {isChecking ? (
+            <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+          ) : (
+            <Download className="h-3 w-3 mr-1" />
+          )}
+          {isChecking ? '检查中...' : '检查更新'}
+        </Button>
+      </div>
       
       <Dialog open={updateAvailable} onOpenChange={setUpdateAvailable}>
         <DialogContent>
@@ -61,7 +75,7 @@ export function UpdateChecker() {
             <p className="mt-2">更新说明: {updateInfo?.body}</p>
           </div>
           <DialogFooter>
-            <Button onClick={() => setUpdateAvailable(false)}>稍后</Button>
+            <Button variant="outline" onClick={() => setUpdateAvailable(false)}>稍后</Button>
             <Button onClick={handleInstall}>立即更新</Button>
           </DialogFooter>
         </DialogContent>
