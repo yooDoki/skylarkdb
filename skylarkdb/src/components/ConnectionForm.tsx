@@ -139,13 +139,13 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
       {/* Modal */}
       <div 
         className={cn(
-          "relative w-full max-w-lg bg-card rounded-2xl shadow-2xl border transition-all duration-200",
+          "relative w-full max-w-lg max-h-[90vh] bg-card rounded-2xl shadow-2xl border transition-all duration-200 flex flex-col",
           isVisible ? "scale-100 opacity-100" : "scale-95 opacity-0"
         )}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
+        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <div className="flex items-center gap-3">
             <div className={cn(
               "p-2 rounded-lg",
@@ -177,7 +177,7 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
           {/* Type Selection */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">数据库类型</Label>
