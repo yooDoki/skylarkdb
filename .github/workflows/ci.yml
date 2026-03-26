@@ -1,0 +1,99 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-latest
+            args: '--target x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            args: ''
+          - platform: windows-latest
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: skylarkdb/package-lock.json
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './skylarkdb/src-tauri -> target'
+
+      - name: Install dependencies (Ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libayatana-appindicator3-dev
+
+      - name: Install frontend dependencies
+        working-directory: skylarkdb
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: skylarkdb
+        run: npm run build
+
+      - name: Build the app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: skylarkdb
+          args: ${{ matrix.args }}
+
+      - name: Upload artifacts (non-tag builds)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-app-${{ matrix.platform }}${{ matrix.args }}
+          path: |
+            skylarkdb/src-tauri/target/release/bundle/**/*.deb
+            skylarkdb/src-tauri/target/release/bundle/**/*.rpm
+            skylarkdb/src-tauri/target/release/bundle/**/*.AppImage
+            skylarkdb/src-tauri/target/release/bundle/**/*.dmg
+            skylarkdb/src-tauri/target/release/bundle/**/*.exe
+            skylarkdb/src-tauri/target/release/bundle/**/*.msi
+          if-no-files-found: ignore
+
+      - name: Create release (tag builds only)
+        if: github.ref_type == 'tag'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: skylarkdb
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Release ${{ github.ref_name }}'
+          releaseBody: 'See the assets to download this version.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
