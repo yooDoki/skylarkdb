@@ -6,17 +6,22 @@ import { useConnectionStore } from '@/stores/connectionStore';
 import { useSidebarStore } from '@/stores/sidebarStore';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
-import { Database, Server, Settings, Moon, Sun, Sparkles, ChevronRight } from 'lucide-react';
+import { Database, Server, Moon, Sun, Sparkles, ChevronRight, Terminal } from 'lucide-react';
 
 function App() {
   const { activeConnection } = useConnectionStore();
   const { collapsed, toggle } = useSidebarStore();
   const [darkMode, setDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [sqlWorkbenchOpen, setSqlWorkbenchOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    setSqlWorkbenchOpen(false);
+  }, [activeConnection.connection?.id, activeConnection.connection?.type]);
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
@@ -41,6 +46,17 @@ function App() {
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {activeConnection.connection?.type === 'mysql' && activeConnection.status === 'connected' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSqlWorkbenchOpen(true)}
+              className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
+              title="SQL 查询"
+            >
+              <Terminal className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -48,13 +64,6 @@ function App() {
             className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
           >
             {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
-          >
-            <Settings className="h-4 w-4" />
           </Button>
         </div>
       </header>
@@ -93,7 +102,10 @@ function App() {
           {activeConnection.connection ? (
             <div className={`h-full min-h-0 animate-fade-in ${mounted ? 'opacity-100' : 'opacity-0'}`}>
               {activeConnection.connection.type === 'mysql' ? (
-                <MySQLExplorer />
+                <MySQLExplorer
+                  sqlWorkbenchOpen={sqlWorkbenchOpen}
+                  onSqlWorkbenchOpenChange={setSqlWorkbenchOpen}
+                />
               ) : (
                 <RedisExplorer />
               )}

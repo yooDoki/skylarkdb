@@ -40,3 +40,18 @@ pub async fn delete_redis_key(connection_id: String, key: String) -> Result<bool
 pub async fn get_redis_info(connection_id: String) -> Result<RedisInfo, String> {
     redis::get_info(&connection_id).await
 }
+
+#[command]
+pub async fn get_redis_databases(connection_id: String) -> Result<Vec<RedisDatabase>, String> {
+    redis::get_databases(&connection_id).await
+}
+
+#[command]
+pub async fn select_redis_database(connection_id: String, db_index: i64) -> Result<(), String> {
+    redis::select_database(&connection_id, db_index).await
+}
+
+#[command]
+pub async fn get_selected_redis_database(connection_id: String) -> Result<i64, String> {
+    Ok(redis::get_selected_database(&connection_id).await)
+}

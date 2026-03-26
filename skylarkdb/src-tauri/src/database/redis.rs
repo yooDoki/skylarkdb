@@ -1,10 +1,32 @@
 use redis::Client;
 use redis::AsyncCommands;
 use crate::models::*;
-use crate::database::REDIS_CONNECTIONS;
+use crate::database::{REDIS_CONNECTIONS, REDIS_SELECTED_DATABASE};
+
+async fn get_connection_for_db(connection_id: &str) -> Result<(redis::aio::MultiplexedConnection, i64), String> {
+    let connections = REDIS_CONNECTIONS.lock().await;
+    let client = connections.get(connection_id)
+        .ok_or("Connection not found")?;
+
+    let mut con = client.get_multiplexed_async_connection()
+        .await
+        .map_err(|e| format!("Failed to get connection: {}", e))?;
+
+    let selected_db = REDIS_SELECTED_DATABASE.lock().await;
+    let db_index = selected_db.get(connection_id).copied().unwrap_or(0);
+    drop(selected_db);
+
+    let _: () = redis::cmd("SELECT")
+        .arg(db_index)
+        .query_async(&mut con)
+        .await
+        .map_err(|e| format!("Failed to select database: {}", e))?;
+
+    Ok((con, db_index))
+}
 
 pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult, String> {
-    let redis_url = if let Some(password) = &connection.password {
+    let redis_url = if let Some(password) = connection.password.as_ref().filter(|s| !s.trim().is_empty()) {
         format!(
             "redis://:{}@{}:{}",
             password, connection.host, connection.port
@@ -19,6 +41,9 @@ pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult
                 Ok(_) => {
                     let mut connections = REDIS_CONNECTIONS.lock().await;
                     connections.insert(connection.id.clone(), client);
+                    // 初始化选中的数据库为 0
+                    let mut selected_db = REDIS_SELECTED_DATABASE.lock().await;
+                    selected_db.insert(connection.id.clone(), 0);
                     Ok(ConnectionResult {
                         success: true,
                         message: "Connected successfully".to_string(),
@@ -36,7 +61,7 @@ pub async fn test_connection(
     port: u16,
     password: &Option<String>,
 ) -> Result<ConnectionResult, String> {
-    let redis_url = if let Some(pwd) = password {
+    let redis_url = if let Some(pwd) = password.as_ref().filter(|s| !s.trim().is_empty()) {
         format!("redis://:{}@{}:{}", pwd, host, port)
     } else {
         format!("redis://{}:{}", host, port)
@@ -65,18 +90,11 @@ pub async fn disconnect(connection_id: &str) -> Result<(), String> {
 }
 
 pub async fn get_keys(connection_id: &str, pattern: &str) -> Result<Vec<RedisKey>, String> {
-    let connections = REDIS_CONNECTIONS.lock().await;
-    let client = connections.get(connection_id)
-        .ok_or("Connection not found")?;
-    
-    let mut con = client.get_multiplexed_async_connection()
-        .await
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+    let (mut con, _db_index) = get_connection_for_db(connection_id).await?;
 
-    // Use SCAN command instead of KEYS for better performance
     let mut keys: Vec<RedisKey> = Vec::new();
     let mut cursor: u32 = 0;
-    
+
     loop {
         let (next_cursor, key_batch): (u32, Vec<String>) = redis::cmd("SCAN")
             .arg(cursor)
@@ -87,12 +105,12 @@ pub async fn get_keys(connection_id: &str, pattern: &str) -> Result<Vec<RedisKey
             .query_async(&mut con)
             .await
             .map_err(|e| format!("Failed to scan keys: {}", e))?;
-        
+
         for key in key_batch {
             let key_type: String = con.get(&key).await.unwrap_or_else(|_| "none".to_string());
             let ttl: i64 = con.ttl(&key).await.unwrap_or(-1);
             let size = get_key_size(&mut con, &key, &key_type).await;
-            
+
             keys.push(RedisKey {
                 key,
                 r#type: key_type,
@@ -100,7 +118,7 @@ pub async fn get_keys(connection_id: &str, pattern: &str) -> Result<Vec<RedisKey
                 size,
             });
         }
-        
+
         if next_cursor == 0 {
             break;
         }
@@ -141,18 +159,11 @@ async fn get_key_size(
 }
 
 pub async fn get_value(connection_id: &str, key: &str) -> Result<String, String> {
-    let connections = REDIS_CONNECTIONS.lock().await;
-    let client = connections.get(connection_id)
-        .ok_or("Connection not found")?;
-    
-    let mut con = client.get_multiplexed_async_connection()
-        .await
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+    let (mut con, _db_index) = get_connection_for_db(connection_id).await?;
 
-    // Get the type of the key
     let key_type: String = redis::cmd("TYPE").arg(key).query_async(&mut con).await
         .unwrap_or_else(|_| "none".to_string());
-    
+
     let value = match key_type.as_str() {
         "string" => {
             let value: Option<String> = con.get(key).await
@@ -187,17 +198,11 @@ pub async fn get_value(connection_id: &str, key: &str) -> Result<String, String>
 }
 
 pub async fn delete_key(connection_id: &str, key: &str) -> Result<bool, String> {
-    let connections = REDIS_CONNECTIONS.lock().await;
-    let client = connections.get(connection_id)
-        .ok_or("Connection not found")?;
-    
-    let mut con = client.get_multiplexed_async_connection()
-        .await
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+    let (mut con, _db_index) = get_connection_for_db(connection_id).await?;
 
     let result: i32 = con.del(key).await
         .map_err(|e| format!("Failed to delete key: {}", e))?;
-    
+
     Ok(result > 0)
 }
 
@@ -275,4 +280,82 @@ pub async fn get_info(connection_id: &str) -> Result<RedisInfo, String> {
         connected_clients,
         total_keys,
     })
+}
+
+/// 获取所有数据库的信息
+pub async fn get_databases(connection_id: &str) -> Result<Vec<RedisDatabase>, String> {
+    let connections = REDIS_CONNECTIONS.lock().await;
+    let client = connections.get(connection_id)
+        .ok_or("Connection not found")?;
+
+    let mut con = client.get_multiplexed_async_connection()
+        .await
+        .map_err(|e| format!("Failed to get connection: {}", e))?;
+
+    let mut db_key_counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+
+    let info: String = redis::cmd("INFO")
+        .arg("keyspace")
+        .query_async(&mut con)
+        .await
+        .map_err(|e| format!("Failed to get keyspace info: {}", e))?;
+
+    for line in info.lines() {
+        if line.starts_with("db") {
+            if let Some((db_part, rest)) = line.split_once(':') {
+                let index = db_part.trim_start_matches("db").parse::<i64>().unwrap_or(0);
+                let mut key_count = 0i64;
+
+                for part in rest.split(',') {
+                    if let Some(keys_str) = part.strip_prefix("keys=") {
+                        key_count = keys_str.parse::<i64>().unwrap_or(0);
+                    }
+                }
+
+                db_key_counts.insert(index, key_count);
+            }
+        }
+    }
+
+    let mut databases = Vec::new();
+    for i in 0..16 {
+        databases.push(RedisDatabase {
+            index: i,
+            name: format!("DB {}", i),
+            key_count: *db_key_counts.get(&i).unwrap_or(&0),
+        });
+    }
+
+    Ok(databases)
+}
+
+/// 切换数据库
+pub async fn select_database(connection_id: &str, db_index: i64) -> Result<(), String> {
+    let connections = REDIS_CONNECTIONS.lock().await;
+    let client = connections.get(connection_id)
+        .ok_or("Connection not found")?;
+    
+    let mut con = client.get_multiplexed_async_connection()
+        .await
+        .map_err(|e| format!("Failed to get connection: {}", e))?;
+
+    // 执行 SELECT 命令切换数据库
+    let _: () = redis::cmd("SELECT")
+        .arg(db_index)
+        .query_async(&mut con)
+        .await
+        .map_err(|e| format!("Failed to select database: {}", e))?;
+    
+    // 更新选中的数据库索引
+    drop(connections);
+    let mut selected_db = REDIS_SELECTED_DATABASE.lock().await;
+    selected_db.insert(connection_id.to_string(), db_index);
+    
+    Ok(())
+}
+
+/// 获取当前选中的数据库索引
+pub async fn get_selected_database(connection_id: &str) -> i64 {
+    let selected_db = REDIS_SELECTED_DATABASE.lock().await;
+    selected_db.get(connection_id).copied().unwrap_or(0)
 }

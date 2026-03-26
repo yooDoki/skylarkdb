@@ -15,6 +15,10 @@ import {
   getRedisValue,
   deleteRedisKey,
   getRedisInfo,
+  getRedisDatabases,
+  selectRedisDatabase,
+  getSelectedRedisDatabase,
+  RedisDatabase,
 } from '@/utils/api';
 
 export function RedisExplorer() {
@@ -26,13 +30,29 @@ export function RedisExplorer() {
   const [loading, setLoading] = useState(false);
   const [redisInfo, setRedisInfo] = useState<RedisInfo | null>(null);
   const [copied, setCopied] = useState(false);
+  const [databases, setDatabases] = useState<RedisDatabase[]>([]);
+  const [selectedDb, setSelectedDb] = useState<number>(0);
 
   // Load Redis data on connect
   useEffect(() => {
     if (activeConnection.status === 'connected' && activeConnection.connection) {
       loadRedisData();
+      loadDatabases();
     }
   }, [activeConnection.status, activeConnection.connection]);
+
+  const loadDatabases = async () => {
+    if (!activeConnection.connection) return;
+    
+    try {
+      const dbs = await getRedisDatabases(activeConnection.connection.id);
+      setDatabases(dbs);
+      const currentDb = await getSelectedRedisDatabase(activeConnection.connection.id);
+      setSelectedDb(currentDb);
+    } catch (error) {
+      console.error('Failed to load databases:', error);
+    }
+  };
 
   const loadRedisData = async () => {
     if (!activeConnection.connection) return;
@@ -48,6 +68,27 @@ export function RedisExplorer() {
       setRedisInfo(infoData);
     } catch (error) {
       console.error('Failed to load Redis data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDatabaseChange = async (dbIndex: number) => {
+    if (!activeConnection.connection || dbIndex === selectedDb) return;
+    
+    setLoading(true);
+    try {
+      await selectRedisDatabase(activeConnection.connection.id, dbIndex);
+      setSelectedDb(dbIndex);
+      // 重新加载数据
+      const keysData = await getRedisKeys(activeConnection.connection.id, searchPattern);
+      setKeys(keysData);
+      const infoData = await getRedisInfo(activeConnection.connection.id);
+      setRedisInfo(infoData);
+      setSelectedKey(null);
+      setKeyValue('');
+    } catch (error) {
+      console.error('Failed to switch database:', error);
     } finally {
       setLoading(false);
     }
@@ -223,6 +264,22 @@ export function RedisExplorer() {
                 {redisInfo.total_keys.toLocaleString()}
               </Badge>
             )}
+          </div>
+          {/* Database Selector */}
+          <div className="flex items-center gap-2">
+            <Database className="h-3.5 w-3.5 text-muted-foreground" />
+            <select
+              value={selectedDb}
+              onChange={(e) => handleDatabaseChange(Number(e.target.value))}
+              disabled={loading || databases.length === 0}
+              className="flex-1 h-8 text-xs px-2 rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-redis/20"
+            >
+              {databases.map((db) => (
+                <option key={db.index} value={db.index}>
+                  {db.name} ({db.keyCount.toLocaleString()} keys)
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex gap-2">
             <div className="relative flex-1">

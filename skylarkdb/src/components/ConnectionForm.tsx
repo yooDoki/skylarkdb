@@ -69,10 +69,17 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const connectionData = {
+      ...formData,
+      username: formData.username.trim() === '' ? undefined : formData.username,
+      password: formData.password.trim() === '' ? undefined : formData.password,
+      database: formData.database.trim() === '' ? undefined : formData.database,
+    };
+
     if (initialData) {
-      updateConnection(initialData.id, formData);
+      updateConnection(initialData.id, connectionData);
     } else {
-      addConnection(formData);
+      addConnection(connectionData);
     }
     onClose();
   };
@@ -254,6 +261,10 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
                   onChange={(e) => setFormData({ ...formData, database: e.target.value })}
                   className="h-11 rounded-lg"
                 />
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  建议填写要操作的库名；留空时执行 SQL 需使用 <span className="font-mono">库名.表名</span> 或先写{' '}
+                  <span className="font-mono">USE 库名</span>，否则可能报 No database selected。
+                </p>
               </div>
             </div>
           )}

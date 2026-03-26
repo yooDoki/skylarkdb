@@ -167,7 +167,7 @@ export function DataEditForm({
   return (
     <div
       className={cn(
-        'fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-200',
+        'fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 transition-opacity duration-200',
         isVisible ? 'opacity-100' : 'opacity-0'
       )}
       onClick={onClose}
@@ -178,13 +178,13 @@ export function DataEditForm({
       {/* Modal */}
       <div
         className={cn(
-          'relative w-full max-w-2xl max-h-[90vh] bg-card rounded-2xl shadow-2xl border transition-all duration-200 overflow-hidden',
+          'relative w-full sm:max-w-2xl max-h-[95vh] bg-card rounded-2xl shadow-2xl border transition-all duration-200 overflow-hidden flex flex-col',
           isVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <CardHeader className="pb-4 border-b bg-muted/30">
+        {/* Header - Fixed */}
+        <CardHeader className="pb-4 border-b bg-muted/30 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-mysql/10">
@@ -205,16 +205,16 @@ export function DataEditForm({
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="h-9 w-9 rounded-full hover:bg-muted"
+              className="h-9 w-9 rounded-full hover:bg-muted flex-shrink-0"
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
         </CardHeader>
 
-        {/* Form Content */}
-        <form onSubmit={handleSubmit} className="overflow-auto">
-          <CardContent className="p-6 space-y-4 max-h-[60vh]">
+        {/* Form Content - Scrollable */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <CardContent className="p-4 sm:p-6 space-y-4 overflow-auto flex-1">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {columns.map((col) => {
                 const hasError = errors[col.name];
@@ -292,30 +292,30 @@ export function DataEditForm({
             </div>
           </CardContent>
 
-          {/* Footer */}
-          <div className="flex items-center justify-between p-6 border-t bg-muted/30">
+          {/* Footer - Fixed */}
+          <div className="flex items-center justify-between p-4 sm:p-6 border-t bg-muted/30 flex-shrink-0 gap-2 flex-wrap">
             <Button
               type="button"
               variant="outline"
               onClick={handleReset}
-              className="h-10 rounded-lg"
+              className="h-10 rounded-lg flex-shrink-0"
             >
               <RotateCcw className="h-4 w-4 mr-2" />
               重置
             </Button>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-1 justify-end">
               <Button
                 type="button"
                 variant="outline"
                 onClick={onClose}
-                className="h-10 rounded-lg"
+                className="h-10 rounded-lg flex-shrink-0"
               >
                 取消
               </Button>
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="h-10 rounded-lg bg-mysql hover:bg-mysql/90"
+                className="h-10 rounded-lg bg-mysql hover:bg-mysql/90 flex-shrink-0"
               >
                 {isSubmitting ? (
                   <>

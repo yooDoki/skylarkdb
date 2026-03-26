@@ -20,8 +20,8 @@
         "resizable": true,
         "title": "SkylarkDB",
         "width": 1200,
-        "minWidth": 800,
-        "minHeight": 600,
+        "minWidth": 1024,
+        "minHeight": 720,
         "center": true
       }
     ]

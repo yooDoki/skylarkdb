@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { ConnectionForm } from './ConnectionForm';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,8 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
     open: false,
     id: null,
   });
+  const connectionRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const handleConnect = async (connection: DatabaseConnection) => {
     setActiveConnection(connection);
@@ -66,6 +68,15 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
     }
     setDeleteConfirm({ open: false, id: null });
   };
+
+  useEffect(() => {
+    if (activeConnection.connection?.id && scrollContainerRef.current) {
+      const element = connectionRefs.current.get(activeConnection.connection.id);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [activeConnection.connection?.id]);
 
   const getStatusIndicator = (connection: DatabaseConnection) => {
     if (activeConnection.connection?.id === connection.id) {
@@ -147,7 +158,7 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
         </div>
 
         {/* Connection List */}
-        <div className="flex-1 overflow-auto -mx-4 px-4">
+        <div ref={scrollContainerRef} className="flex-1 overflow-auto -mx-4 px-4">
           {connections.length === 0 ? (
             <div className="text-center py-12 animate-fade-in">
               <div className="relative mb-4">
@@ -166,6 +177,7 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
                 return (
                   <div
                     key={connection.id}
+                    ref={(el) => connectionRefs.current.set(connection.id, el)}
                     onMouseEnter={() => setHoveredId(connection.id)}
                     onMouseLeave={() => setHoveredId(null)}
                     className={cn(
