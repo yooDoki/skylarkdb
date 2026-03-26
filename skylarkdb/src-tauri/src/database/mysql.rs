@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use sqlx::{Row, Column, mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode}};
+use sqlx::{Executor, Row, Column, mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode}};
 use crate::models::*;
 use crate::database::{MYSQL_CONNECTIONS, MYSQL_DEFAULT_DATABASE};
 
@@ -1089,8 +1089,8 @@ pub async fn execute_query(
     let start = std::time::Instant::now();
 
     if let Some(ref db) = default_db {
-        sqlx::query(&format!("USE `{}`", escape_mysql_ident(db)))
-            .execute(&pool)
+        let use_sql = format!("USE `{}`", escape_mysql_ident(db));
+        pool.execute(use_sql.as_str())
             .await
             .map_err(|e| {
                 let msg = e.to_string();
