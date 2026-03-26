@@ -61,7 +61,7 @@ export function ImportExportModal({ isOpen, onClose, connectionId, database }: I
             <ImportPanel connectionId={connectionId} database={database} onClose={onClose} />
           )}
           {activeTab === 'sakila' && (
-            <SakilaPanel connectionId={connectionId} onClose={onClose} />
+            <SakilaPanel onClose={onClose} />
           )}
         </div>
       </div>
@@ -360,7 +360,7 @@ function ImportPanel({ connectionId, database, onClose }: { connectionId: string
 }
 
 // Sakila Panel Component
-function SakilaPanel({ connectionId, onClose }: { connectionId: string; onClose: () => void }) {
+function SakilaPanel({ onClose }: { onClose: () => void }) {
   const [options, setOptions] = useState<Partial<SakilaInitOptions>>({
     mysqlVersion: '5.7',
     dockerContainerName: 'skylarkdb-sakila',
