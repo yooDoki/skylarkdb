@@ -15,15 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: macos-latest
-            args: '--target aarch64-apple-darwin'
-          - platform: macos-latest
-            args: '--target x86_64-apple-darwin'
-          - platform: ubuntu-22.04
-            args: ''
-          - platform: windows-latest
-            args: ''
+        platform: [macos-latest, ubuntu-22.04, windows-latest]
 
     runs-on: ${{ matrix.platform }}
 
@@ -40,13 +32,11 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: './skylarkdb/src-tauri -> target'
+          workspaces: skylarkdb/src-tauri
 
       - name: Install dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
@@ -58,42 +48,14 @@ jobs:
         working-directory: skylarkdb
         run: npm ci
 
-      - name: Build frontend
-        working-directory: skylarkdb
-        run: npm run build
-
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: skylarkdb
-          args: ${{ matrix.args }}
-
-      - name: Upload artifacts (non-tag builds)
-        if: github.ref_type != 'tag'
-        uses: actions/upload-artifact@v4
-        with:
-          name: tauri-app-${{ matrix.platform }}${{ matrix.args }}
-          path: |
-            skylarkdb/src-tauri/target/release/bundle/**/*.deb
-            skylarkdb/src-tauri/target/release/bundle/**/*.rpm
-            skylarkdb/src-tauri/target/release/bundle/**/*.AppImage
-            skylarkdb/src-tauri/target/release/bundle/**/*.dmg
-            skylarkdb/src-tauri/target/release/bundle/**/*.exe
-            skylarkdb/src-tauri/target/release/bundle/**/*.msi
-          if-no-files-found: ignore
-
-      - name: Create release (tag builds only)
-        if: github.ref_type == 'tag'
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: skylarkdb
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Release ${{ github.ref_name }}'
-          releaseBody: 'See the assets to download this version.'
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+          projectPath: ./skylarkdb
+          includeRelease: ${{ github.ref_type == 'tag' }}
+          includeDebug: ${{ github.ref_type != 'tag' }}
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || '' }}
+          releaseDraft: ${{ github.ref_type == 'tag' }}
