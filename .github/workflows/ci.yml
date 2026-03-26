@@ -63,4 +63,4 @@ jobs:
           includeDebug: ${{ github.ref_type != 'tag' }}
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: ${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || '' }}
-          releaseDraft: ${{ github.ref_type == 'tag' }}
+          releaseDraft: false
