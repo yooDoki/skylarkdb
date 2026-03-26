@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 
-use sqlx::{Executor, Row, Column, mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode}};
-use crate::models::*;
 use crate::database::{MYSQL_CONNECTIONS, MYSQL_DEFAULT_DATABASE};
+use crate::models::*;
+use sqlx::{
+    mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode},
+    Column, Executor, Row,
+};
 
 async fn set_default_database(connection_id: &str, database_name: &str) {
     let db = database_name.trim();
@@ -153,18 +156,15 @@ fn build_filter_sql(
         "is_null" => Ok((format!("`{}` IS NULL", escaped), vec![])),
         "is_not_null" => Ok((format!("`{}` IS NOT NULL", escaped), vec![])),
         "eq" => {
-            let v = raw_value
-                .ok_or_else(|| "筛选「等于」需要提供值".to_string())?;
+            let v = raw_value.ok_or_else(|| "筛选「等于」需要提供值".to_string())?;
             Ok((format!("`{}` <=> ?", escaped), vec![v.to_string()]))
         }
         "ne" => {
-            let v = raw_value
-                .ok_or_else(|| "筛选「不等于」需要提供值".to_string())?;
+            let v = raw_value.ok_or_else(|| "筛选「不等于」需要提供值".to_string())?;
             Ok((format!("NOT (`{}` <=> ?)", escaped), vec![v.to_string()]))
         }
         "contains" => {
-            let v = raw_value
-                .ok_or_else(|| "筛选「包含」需要提供值".to_string())?;
+            let v = raw_value.ok_or_else(|| "筛选「包含」需要提供值".to_string())?;
             let pat = format!("%{}%", escape_mysql_like_pattern(v));
             if text_like_like {
                 Ok((format!("`{}` LIKE ?", escaped), vec![pat]))
@@ -173,8 +173,7 @@ fn build_filter_sql(
             }
         }
         "starts_with" => {
-            let v = raw_value
-                .ok_or_else(|| "筛选「开头是」需要提供值".to_string())?;
+            let v = raw_value.ok_or_else(|| "筛选「开头是」需要提供值".to_string())?;
             let pat = format!("{}%", escape_mysql_like_pattern(v));
             if text_like_like {
                 Ok((format!("`{}` LIKE ?", escaped), vec![pat]))
@@ -183,8 +182,7 @@ fn build_filter_sql(
             }
         }
         "gt" | "lt" | "gte" | "lte" => {
-            let v = raw_value
-                .ok_or_else(|| "筛选比较需要提供值".to_string())?;
+            let v = raw_value.ok_or_else(|| "筛选比较需要提供值".to_string())?;
             let cmp = match op {
                 "gt" => ">",
                 "lt" => "<",
@@ -199,9 +197,17 @@ fn build_filter_sql(
 }
 
 pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult, String> {
-    let username = connection.username.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or("root");
-    let password = connection.password.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or("");
-    
+    let username = connection
+        .username
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("root");
+    let password = connection
+        .password
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("");
+
     let mut opts = MySqlConnectOptions::new()
         .host(&connection.host)
         .port(connection.port)
@@ -234,17 +240,19 @@ pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult
         let mut connections = MYSQL_CONNECTIONS.lock().await;
         connections.insert(connection.id.clone(), pool);
     }
-    
+
     {
         let mut meta = MYSQL_DEFAULT_DATABASE.lock().await;
         meta.insert(
             connection.id.clone(),
-            connection.database.clone()
+            connection
+                .database
+                .clone()
                 .filter(|s| !s.trim().is_empty())
                 .map(|s| s.trim().to_string()),
         );
     }
-    
+
     Ok(ConnectionResult {
         success: true,
         message: "Connected successfully".to_string(),
@@ -259,9 +267,15 @@ pub async fn test_connection(
     database: &Option<String>,
     ssl: bool,
 ) -> Result<ConnectionResult, String> {
-    let user = username.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or("root");
-    let pass = password.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or("");
-    
+    let user = username
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("root");
+    let pass = password
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("");
+
     let mut opts = MySqlConnectOptions::new()
         .host(host)
         .port(port)
@@ -289,7 +303,7 @@ pub async fn test_connection(
         .map_err(|e| format!("Connection failed: {}", e))?;
 
     pool.close().await;
-    
+
     Ok(ConnectionResult {
         success: true,
         message: "Connection successful!".to_string(),
@@ -310,7 +324,10 @@ pub async fn disconnect(connection_id: &str) -> Result<(), String> {
 pub async fn get_tables(connection_id: &str) -> Result<Vec<MySQLTable>, String> {
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
-        connections.get(connection_id).cloned().ok_or("Connection not found")?
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
     };
 
     let default_db = {
@@ -325,7 +342,7 @@ pub async fn get_tables(connection_id: &str) -> Result<Vec<MySQLTable>, String> 
              FROM information_schema.tables 
              WHERE table_schema = ?
              AND table_type = 'BASE TABLE'
-             ORDER BY table_name"
+             ORDER BY table_name",
         )
         .bind(&db)
         .fetch_all(&pool)
@@ -338,7 +355,7 @@ pub async fn get_tables(connection_id: &str) -> Result<Vec<MySQLTable>, String> 
              FROM information_schema.tables 
              WHERE table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
              AND table_type = 'BASE TABLE'
-             ORDER BY table_name"
+             ORDER BY table_name",
         )
         .fetch_all(&pool)
         .await
@@ -359,10 +376,16 @@ pub async fn get_tables(connection_id: &str) -> Result<Vec<MySQLTable>, String> 
     Ok(tables)
 }
 
-pub async fn get_columns(connection_id: &str, table_name: &str) -> Result<Vec<MySQLColumn>, String> {
+pub async fn get_columns(
+    connection_id: &str,
+    table_name: &str,
+) -> Result<Vec<MySQLColumn>, String> {
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
-        connections.get(connection_id).cloned().ok_or("Connection not found")?
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
     };
 
     let default_db = {
@@ -370,8 +393,7 @@ pub async fn get_columns(connection_id: &str, table_name: &str) -> Result<Vec<My
         meta.get(connection_id).cloned().flatten()
     };
 
-    let database_name =
-        resolve_table_schema(&pool, table_name, default_db.as_deref()).await?;
+    let database_name = resolve_table_schema(&pool, table_name, default_db.as_deref()).await?;
 
     set_default_database(connection_id, &database_name).await;
 
@@ -389,41 +411,55 @@ pub async fn get_columns(connection_id: &str, table_name: &str) -> Result<Vec<My
 
     let columns: Vec<MySQLColumn> = rows
         .into_iter()
-        .map(|(name, data_type, nullable, default, extra, column_type, _charset, _collation)| {
-            let full_type = column_type.clone();
-            let type_lower = data_type.to_lowercase();
-            let is_unsigned = full_type.to_lowercase().contains("unsigned");
-            let is_blob = type_lower == "blob" || type_lower == "tinyblob" || type_lower == "mediumblob" || type_lower == "longblob" || type_lower == "binary" || type_lower == "varbinary";
-            let is_enum = type_lower == "enum";
-            let is_json = type_lower == "json";
-            let is_bit = type_lower == "bit";
-            let is_geometry = type_lower == "geometry" || type_lower == "point" || type_lower == "linestring" || type_lower == "polygon" || type_lower == "multipoint" || type_lower == "multilinestring" || type_lower == "multipolygon" || type_lower == "geometrycollection";
+        .map(
+            |(name, data_type, nullable, default, extra, column_type, _charset, _collation)| {
+                let full_type = column_type.clone();
+                let type_lower = data_type.to_lowercase();
+                let is_unsigned = full_type.to_lowercase().contains("unsigned");
+                let is_blob = type_lower == "blob"
+                    || type_lower == "tinyblob"
+                    || type_lower == "mediumblob"
+                    || type_lower == "longblob"
+                    || type_lower == "binary"
+                    || type_lower == "varbinary";
+                let is_enum = type_lower == "enum";
+                let is_json = type_lower == "json";
+                let is_bit = type_lower == "bit";
+                let is_geometry = type_lower == "geometry"
+                    || type_lower == "point"
+                    || type_lower == "linestring"
+                    || type_lower == "polygon"
+                    || type_lower == "multipoint"
+                    || type_lower == "multilinestring"
+                    || type_lower == "multipolygon"
+                    || type_lower == "geometrycollection";
 
-            let enum_values = if is_enum {
-                parse_enum_values(&full_type)
-            } else {
-                None
-            };
+                let enum_values = if is_enum {
+                    parse_enum_values(&full_type)
+                } else {
+                    None
+                };
 
-            let max_length = extract_max_length(&full_type);
+                let max_length = extract_max_length(&full_type);
 
-            MySQLColumn {
-                name,
-                full_type,
-                r#type: data_type,
-                nullable: nullable == "YES",
-                default,
-                extra: extra.unwrap_or_default(),
-                is_unsigned,
-                is_blob,
-                is_enum,
-                is_json,
-                is_bit,
-                is_geometry,
-                enum_values,
-                max_length,
-            }
-        })
+                MySQLColumn {
+                    name,
+                    full_type,
+                    r#type: data_type,
+                    nullable: nullable == "YES",
+                    default,
+                    extra: extra.unwrap_or_default(),
+                    is_unsigned,
+                    is_blob,
+                    is_enum,
+                    is_json,
+                    is_bit,
+                    is_geometry,
+                    enum_values,
+                    max_length,
+                }
+            },
+        )
         .collect();
 
     Ok(columns)
@@ -434,7 +470,7 @@ fn extract_max_length(column_type: &str) -> Option<String> {
     if let Some(start) = upper.find('(') {
         if let Some(end) = upper.find(')') {
             if end > start {
-                return Some(column_type[start+1..end].to_string());
+                return Some(column_type[start + 1..end].to_string());
             }
         }
     }
@@ -486,7 +522,10 @@ pub async fn get_table_data(
 ) -> Result<TableDataResult, String> {
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
-        connections.get(connection_id).cloned().ok_or("Connection not found")?
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
     };
 
     let start = std::time::Instant::now();
@@ -496,8 +535,7 @@ pub async fn get_table_data(
         meta.get(connection_id).cloned().flatten()
     };
 
-    let database_name =
-        resolve_table_schema(&pool, table_name, default_db.as_deref()).await?;
+    let database_name = resolve_table_schema(&pool, table_name, default_db.as_deref()).await?;
 
     set_default_database(connection_id, &database_name).await;
 
@@ -511,9 +549,7 @@ pub async fn get_table_data(
         if fc.is_empty() {
             return Err("筛选列名无效".to_string());
         }
-        let col = col_meta
-            .get(fc)
-            .ok_or_else(|| format!("未知列: {}", fc))?;
+        let col = col_meta.get(fc).ok_or_else(|| format!("未知列: {}", fc))?;
         if !column_filterable(col) {
             return Err(format!(
                 "列「{}」为 JSON/BLOB/GEOMETRY/BIT 等类型，不支持筛选",
@@ -531,9 +567,7 @@ pub async fn get_table_data(
         if ob.is_empty() {
             return Err("排序列名无效".to_string());
         }
-        let col = col_meta
-            .get(ob)
-            .ok_or_else(|| format!("未知列: {}", ob))?;
+        let col = col_meta.get(ob).ok_or_else(|| format!("未知列: {}", ob))?;
         if !column_sortable(col) {
             return Err(format!(
                 "列「{}」为 JSON/BLOB/GEOMETRY/BIT 等类型，不支持排序",
@@ -541,11 +575,7 @@ pub async fn get_table_data(
             ));
         }
         let dir = if order_desc { "DESC" } else { "ASC" };
-        order_sql = Some(format!(
-            "ORDER BY `{}` {}",
-            escape_mysql_ident(ob),
-            dir
-        ));
+        order_sql = Some(format!("ORDER BY `{}` {}", escape_mysql_ident(ob), dir));
     }
 
     let mut count_query = format!(
@@ -599,7 +629,8 @@ pub async fn get_table_data(
             .map(|row| row.get::<String, _>("Field"))
             .collect()
     } else {
-        result[0].columns()
+        result[0]
+            .columns()
             .iter()
             .map(|c| c.name().to_string())
             .collect()
@@ -650,8 +681,7 @@ fn extract_value(row: &sqlx::mysql::MySqlRow, index: usize) -> serde_json::Value
     } else if let Ok(v) = row.try_get::<u8, _>(index) {
         serde_json::Value::Number(v.into())
     } else if let Ok(v) = row.try_get::<f64, _>(index) {
-        serde_json::Number::from_f64(v)
-            .map_or(serde_json::Value::Null, serde_json::Value::Number)
+        serde_json::Number::from_f64(v).map_or(serde_json::Value::Null, serde_json::Value::Number)
     } else if let Ok(v) = row.try_get::<f32, _>(index) {
         serde_json::Number::from_f64(v as f64)
             .map_or(serde_json::Value::Null, serde_json::Value::Number)
@@ -703,7 +733,10 @@ pub async fn insert_record(
 ) -> Result<u64, String> {
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
-        connections.get(connection_id).cloned().ok_or("Connection not found")?
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
     };
 
     let default_db = {
@@ -711,20 +744,23 @@ pub async fn insert_record(
         meta.get(connection_id).cloned().flatten()
     };
 
-    let database_name =
-        resolve_table_schema(&pool, table_name, default_db.as_deref()).await?;
+    let database_name = resolve_table_schema(&pool, table_name, default_db.as_deref()).await?;
 
     set_default_database(connection_id, &database_name).await;
 
     let obj = data.as_object().ok_or("Invalid data format")?;
     let columns: Vec<&str> = obj.keys().map(|k| k.as_str()).collect();
     let placeholders: Vec<&str> = (0..columns.len()).map(|_| "?").collect();
-    
+
     let query = format!(
         "INSERT INTO `{}`.`{}` ({}) VALUES ({})",
         database_name,
         table_name,
-        columns.iter().map(|c| format!("`{}`", c)).collect::<Vec<_>>().join(", "),
+        columns
+            .iter()
+            .map(|c| format!("`{}`", c))
+            .collect::<Vec<_>>()
+            .join(", "),
         placeholders.join(", ")
     );
 
@@ -734,7 +770,10 @@ pub async fn insert_record(
         q = bind_value(q, val);
     }
 
-    let result = q.execute(&pool).await.map_err(|e| format!("Insert failed: {}", e))?;
+    let result = q
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Insert failed: {}", e))?;
     Ok(result.last_insert_id())
 }
 
@@ -747,7 +786,10 @@ pub async fn update_record(
 ) -> Result<u64, String> {
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
-        connections.get(connection_id).cloned().ok_or("Connection not found")?
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
     };
 
     let default_db = {
@@ -755,13 +797,13 @@ pub async fn update_record(
         meta.get(connection_id).cloned().flatten()
     };
 
-    let database_name =
-        resolve_table_schema(&pool, table_name, default_db.as_deref()).await?;
+    let database_name = resolve_table_schema(&pool, table_name, default_db.as_deref()).await?;
 
     set_default_database(connection_id, &database_name).await;
 
     let obj = data.as_object().ok_or("Invalid data format")?;
-    let set_clauses: Vec<String> = obj.keys()
+    let set_clauses: Vec<String> = obj
+        .keys()
         .filter(|k| *k != primary_key)
         .map(|k| format!("`{}` = ?", k))
         .collect();
@@ -779,7 +821,7 @@ pub async fn update_record(
     );
 
     let mut q = sqlx::query(&query);
-    
+
     for col in obj.keys().filter(|k| *k != primary_key) {
         let val = obj.get(col).unwrap();
         q = bind_value(q, val);
@@ -787,7 +829,10 @@ pub async fn update_record(
 
     q = bind_value(q, &primary_value);
 
-    let result = q.execute(&pool).await.map_err(|e| format!("Update failed: {}", e))?;
+    let result = q
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Update failed: {}", e))?;
     Ok(result.rows_affected())
 }
 
@@ -799,7 +844,10 @@ pub async fn delete_record(
 ) -> Result<u64, String> {
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
-        connections.get(connection_id).cloned().ok_or("Connection not found")?
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
     };
 
     let default_db = {
@@ -807,26 +855,29 @@ pub async fn delete_record(
         meta.get(connection_id).cloned().flatten()
     };
 
-    let database_name =
-        resolve_table_schema(&pool, table_name, default_db.as_deref()).await?;
+    let database_name = resolve_table_schema(&pool, table_name, default_db.as_deref()).await?;
 
     set_default_database(connection_id, &database_name).await;
 
     let query = format!(
         "DELETE FROM `{}`.`{}` WHERE `{}` = ?",
-        database_name,
-        table_name,
-        primary_key
+        database_name, table_name, primary_key
     );
 
     let mut q = sqlx::query(&query);
     q = bind_value(q, &primary_value);
 
-    let result = q.execute(&pool).await.map_err(|e| format!("Delete failed: {}", e))?;
+    let result = q
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("Delete failed: {}", e))?;
     Ok(result.rows_affected())
 }
 
-fn bind_value<'a>(query: sqlx::query::Query<'a, sqlx::mysql::MySql, sqlx::mysql::MySqlArguments>, value: &serde_json::Value) -> sqlx::query::Query<'a, sqlx::mysql::MySql, sqlx::mysql::MySqlArguments> {
+fn bind_value<'a>(
+    query: sqlx::query::Query<'a, sqlx::mysql::MySql, sqlx::mysql::MySqlArguments>,
+    value: &serde_json::Value,
+) -> sqlx::query::Query<'a, sqlx::mysql::MySql, sqlx::mysql::MySqlArguments> {
     if value.is_null() {
         query.bind(None::<String>)
     } else if let Some(s) = value.as_str() {
@@ -855,14 +906,12 @@ fn bind_value<'a>(query: sqlx::query::Query<'a, sqlx::mysql::MySql, sqlx::mysql:
 
 fn base64_decode(input: &str) -> Result<Vec<u8>, ()> {
     const DECODE_TABLE: [i8; 128] = [
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, -1, -1, 63,
-        52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1,
-        -1,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,
-        15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, -1,
-        -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-        41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, -1,
+        -1, 63, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3, 4,
+        5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1,
+        -1, -1, -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
+        46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1,
     ];
     let input = input.as_bytes();
     let mut result = Vec::with_capacity(input.len() * 3 / 4);
@@ -1065,7 +1114,10 @@ pub async fn execute_query(
 
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
-        connections.get(connection_id).cloned().ok_or("Connection not found")?
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
     };
 
     let default_db = {
@@ -1090,19 +1142,23 @@ pub async fn execute_query(
 
     if let Some(ref db) = default_db {
         let use_sql = format!("USE `{}`", escape_mysql_ident(db));
-        pool.execute(use_sql.as_str())
-            .await
-            .map_err(|e| {
-                let msg = e.to_string();
-                if msg.contains("1046") || msg.contains("3D000") {
-                    format!(
-                        "{} — 提示：请在连接里填写「数据库」名，或在 SQL 中使用 `库名.表名`。",
-                        msg
-                    )
-                } else {
-                    format!("USE 失败: {}", msg)
-                }
-            })?;
+        pool.execute(use_sql.as_str()).await.map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("1046") || msg.contains("3D000") {
+                format!(
+                    "{} — 提示：请在连接里填写「数据库」名，或在 SQL 中使用 `库名.表名`。",
+                    msg
+                )
+            } else {
+                format!("USE 失败: {}", msg)
+            }
+        })?;
+    } else {
+        // 检查查询是否需要数据库
+        let trimmed = query.trim_start();
+        if mysql_query_returns_rows(trimmed) {
+            return Err("error returned from database: 1046 (3D000): No database selected — 提示：请在连接里填写「数据库」名，或在 SQL 中使用 `库名.表名`。".to_string());
+        }
     }
 
     let mut q = sqlx::query(query);
@@ -1179,7 +1235,10 @@ pub async fn get_routines(
 ) -> Result<Vec<MySQLRoutine>, String> {
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
-        connections.get(connection_id).cloned().ok_or("Connection not found")?
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
     };
 
     let default_db = {
@@ -1195,7 +1254,7 @@ pub async fn get_routines(
     let mut query = String::from(
         "SELECT routine_schema, routine_name, routine_type, data_type, routine_definition
          FROM information_schema.routines
-         WHERE routine_schema = ?"
+         WHERE routine_schema = ?",
     );
 
     if let Some(rtype) = routine_type {
@@ -1206,7 +1265,8 @@ pub async fn get_routines(
 
     query.push_str(" ORDER BY routine_name");
 
-    let mut q = sqlx::query_as::<_, (String, String, String, Option<String>, Option<String>)>(&query);
+    let mut q =
+        sqlx::query_as::<_, (String, String, String, Option<String>, Option<String>)>(&query);
     q = q.bind(db_filter);
     if let Some(rtype) = routine_type {
         if !rtype.is_empty() {
@@ -1214,7 +1274,10 @@ pub async fn get_routines(
         }
     }
 
-    let routines_rows = q.fetch_all(&pool).await.map_err(|e| format!("Failed to get routines: {}", e))?;
+    let routines_rows = q
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| format!("Failed to get routines: {}", e))?;
 
     let mut routines = Vec::new();
     for (schema, name, routine_type, data_type, definition) in routines_rows {
@@ -1223,15 +1286,16 @@ pub async fn get_routines(
             "SELECT ordinal_position, parameter_name, parameter_mode, data_type
              FROM information_schema.parameters
              WHERE specific_schema = ? AND specific_name = ?
-             ORDER BY ordinal_position"
+             ORDER BY ordinal_position",
         );
 
-        let params_rows = sqlx::query_as::<_, (i32, Option<String>, Option<String>, String)>(&params_query)
-            .bind(&schema)
-            .bind(&name)
-            .fetch_all(&pool)
-            .await
-            .unwrap_or_default();
+        let params_rows =
+            sqlx::query_as::<_, (i32, Option<String>, Option<String>, String)>(&params_query)
+                .bind(&schema)
+                .bind(&name)
+                .fetch_all(&pool)
+                .await
+                .unwrap_or_default();
 
         let parameters = params_rows
             .into_iter()

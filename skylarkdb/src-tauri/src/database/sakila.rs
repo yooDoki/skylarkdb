@@ -1,5 +1,5 @@
-use std::process::Command;
 use crate::models::*;
+use std::process::Command;
 
 /// Sakila database schema - compatible with MySQL 5.6+/5.7+
 /// This is a simplified version that avoids FULLTEXT and SPATIAL indexes for compatibility
@@ -11,23 +11,21 @@ const SAKILA_DATA: &str = include_str!("../../sakila/sakila-data.sql");
 /// Initialize Sakila database using Docker
 pub fn init_sakila_with_docker(options: &SakilaInitOptions) -> Result<SakilaInitResult, String> {
     // Check if Docker is installed
-    let docker_check = Command::new("docker")
-        .arg("--version")
-        .output();
-    
+    let docker_check = Command::new("docker").arg("--version").output();
+
     if docker_check.is_err() {
         return Err("Docker is not installed or not in PATH".to_string());
     }
-    
+
     // Stop and remove existing container if it exists
     let _ = Command::new("docker")
         .args(&["stop", &options.docker_container_name])
         .output();
-    
+
     let _ = Command::new("docker")
         .args(&["rm", &options.docker_container_name])
         .output();
-    
+
     // Determine MySQL Docker image based on version
     let mysql_image = match options.mysql_version.as_str() {
         "5.6" => "mysql:5.6",
@@ -36,7 +34,7 @@ pub fn init_sakila_with_docker(options: &SakilaInitOptions) -> Result<SakilaInit
         "8" => "mysql:8.0",
         _ => "mysql:5.7", // Default to 5.7 for best compatibility
     };
-    
+
     // Run Docker container
     let run_output = Command::new("docker")
         .args(&[
@@ -53,32 +51,33 @@ pub fn init_sakila_with_docker(options: &SakilaInitOptions) -> Result<SakilaInit
             mysql_image,
         ])
         .output();
-    
+
     match run_output {
         Ok(output) => {
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 return Err(format!("Failed to start Docker container: {}", stderr));
             }
-            
+
             let container_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            
+
             // Wait for MySQL to be ready (poll for ~30 seconds)
             wait_for_mysql_ready(&options.docker_container_name)?;
-            
+
             // Initialize Sakila database
             init_sakila_database(options)?;
-            
+
             let connection_string = format!(
                 "mysql://root:{}@localhost:{}/{}",
-                options.root_password,
-                options.host_port,
-                options.database_name
+                options.root_password, options.host_port, options.database_name
             );
-            
+
             Ok(SakilaInitResult {
                 success: true,
-                message: format!("Sakila database initialized successfully in container '{}'", options.docker_container_name),
+                message: format!(
+                    "Sakila database initialized successfully in container '{}'",
+                    options.docker_container_name
+                ),
                 container_id: Some(container_id),
                 connection_string: Some(connection_string),
             })
@@ -91,10 +90,10 @@ pub fn init_sakila_with_docker(options: &SakilaInitOptions) -> Result<SakilaInit
 fn wait_for_mysql_ready(container_name: &str) -> Result<(), String> {
     use std::thread;
     use std::time::Duration;
-    
+
     let max_attempts = 30;
     let delay = Duration::from_secs(1);
-    
+
     for attempt in 0..max_attempts {
         // Check if MySQL is ready by executing a simple query
         let output = Command::new("docker")
@@ -104,10 +103,13 @@ fn wait_for_mysql_ready(container_name: &str) -> Result<(), String> {
                 "mysqladmin",
                 "ping",
                 "-uroot",
-                &format!("-p{}", std::env::var("MYSQL_ROOT_PASSWORD").unwrap_or_default()),
+                &format!(
+                    "-p{}",
+                    std::env::var("MYSQL_ROOT_PASSWORD").unwrap_or_default()
+                ),
             ])
             .output();
-        
+
         if let Ok(out) = output {
             if out.status.success() {
                 // Additional wait for schema initialization
@@ -115,14 +117,18 @@ fn wait_for_mysql_ready(container_name: &str) -> Result<(), String> {
                 return Ok(());
             }
         }
-        
+
         thread::sleep(delay);
-        
+
         if attempt % 5 == 0 {
-            eprintln!("Waiting for MySQL to be ready... (attempt {}/{})", attempt + 1, max_attempts);
+            eprintln!(
+                "Waiting for MySQL to be ready... (attempt {}/{})",
+                attempt + 1,
+                max_attempts
+            );
         }
     }
-    
+
     Err("MySQL did not become ready within the timeout period".to_string())
 }
 
@@ -130,26 +136,27 @@ fn wait_for_mysql_ready(container_name: &str) -> Result<(), String> {
 fn init_sakila_database(options: &SakilaInitOptions) -> Result<(), String> {
     use std::fs::{self, File};
     use std::io::Write;
-    
+
     // Create temporary directory for SQL files
     let temp_dir = std::env::temp_dir().join("skylarkdb_sakila");
-    fs::create_dir_all(&temp_dir)
-        .map_err(|e| format!("Failed to create temp directory: {}", e))?;
-    
+    fs::create_dir_all(&temp_dir).map_err(|e| format!("Failed to create temp directory: {}", e))?;
+
     // Write schema SQL file
     let schema_path = temp_dir.join("sakila-schema.sql");
-    let mut schema_file = File::create(&schema_path)
-        .map_err(|e| format!("Failed to create schema file: {}", e))?;
-    schema_file.write_all(SAKILA_SCHEMA.as_bytes())
+    let mut schema_file =
+        File::create(&schema_path).map_err(|e| format!("Failed to create schema file: {}", e))?;
+    schema_file
+        .write_all(SAKILA_SCHEMA.as_bytes())
         .map_err(|e| format!("Failed to write schema: {}", e))?;
-    
+
     // Write data SQL file
     let data_path = temp_dir.join("sakila-data.sql");
-    let mut data_file = File::create(&data_path)
-        .map_err(|e| format!("Failed to create data file: {}", e))?;
-    data_file.write_all(SAKILA_DATA.as_bytes())
+    let mut data_file =
+        File::create(&data_path).map_err(|e| format!("Failed to create data file: {}", e))?;
+    data_file
+        .write_all(SAKILA_DATA.as_bytes())
         .map_err(|e| format!("Failed to write data: {}", e))?;
-    
+
     // Copy SQL files to Docker container
     let copy_schema = Command::new("docker")
         .args(&[
@@ -158,11 +165,11 @@ fn init_sakila_database(options: &SakilaInitOptions) -> Result<(), String> {
             &format!("{}:/tmp/", options.docker_container_name),
         ])
         .output();
-    
+
     if let Err(e) = copy_schema {
         return Err(format!("Failed to copy schema to container: {}", e));
     }
-    
+
     let copy_data = Command::new("docker")
         .args(&[
             "cp",
@@ -170,11 +177,11 @@ fn init_sakila_database(options: &SakilaInitOptions) -> Result<(), String> {
             &format!("{}:/tmp/", options.docker_container_name),
         ])
         .output();
-    
+
     if let Err(e) = copy_data {
         return Err(format!("Failed to copy data to container: {}", e));
     }
-    
+
     // Execute schema SQL
     let schema_output = Command::new("docker")
         .args(&[
@@ -187,7 +194,7 @@ fn init_sakila_database(options: &SakilaInitOptions) -> Result<(), String> {
             &format!("source /tmp/sakila-schema.sql"),
         ])
         .output();
-    
+
     if let Ok(out) = schema_output {
         if !out.status.success() {
             let stderr = String::from_utf8_lossy(&out.stderr);
@@ -195,7 +202,7 @@ fn init_sakila_database(options: &SakilaInitOptions) -> Result<(), String> {
             // Continue anyway, as some warnings are expected
         }
     }
-    
+
     // Execute data SQL
     let data_output = Command::new("docker")
         .args(&[
@@ -209,17 +216,17 @@ fn init_sakila_database(options: &SakilaInitOptions) -> Result<(), String> {
             &format!("source /tmp/sakila-data.sql"),
         ])
         .output();
-    
+
     if let Ok(out) = data_output {
         if !out.status.success() {
             let stderr = String::from_utf8_lossy(&out.stderr);
             eprintln!("Warning: Data initialization had issues: {}", stderr);
         }
     }
-    
+
     // Cleanup temp files
     let _ = fs::remove_dir_all(&temp_dir);
-    
+
     Ok(())
 }
 
@@ -232,7 +239,7 @@ pub fn generate_docker_compose(options: &SakilaInitOptions) -> Result<String, St
         "8" => "mysql:8.0",
         _ => "mysql:5.7",
     };
-    
+
     let compose = format!(
         r#"version: '3.8'
 
@@ -269,7 +276,7 @@ volumes:
         options.host_port,
         options.container_port,
     );
-    
+
     Ok(compose)
 }
 

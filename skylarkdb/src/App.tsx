@@ -5,6 +5,7 @@ import { RedisExplorer } from '@/components/RedisExplorer';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { useSidebarStore } from '@/stores/sidebarStore';
 import { Button } from '@/components/ui/button';
+import { UpdateChecker } from '@/components/UpdateChecker';
 import { cn } from '@/utils/cn';
 import { Database, Server, Moon, Sun, Sparkles, ChevronRight, Terminal } from 'lucide-react';
 
@@ -57,6 +58,7 @@ function App() {
               <Terminal className="h-4 w-4" />
             </Button>
           )}
+          <UpdateChecker />
           <Button
             variant="ghost"
             size="icon"

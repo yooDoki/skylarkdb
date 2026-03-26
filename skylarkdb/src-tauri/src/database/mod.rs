@@ -1,12 +1,12 @@
-use std::collections::HashMap;
-use tokio::sync::Mutex;
 use once_cell::sync::Lazy;
 use sqlx::MySqlPool;
+use std::collections::HashMap;
+use tokio::sync::Mutex;
 
-pub mod mysql;
-pub mod redis;
 pub mod export;
 pub mod import;
+pub mod mysql;
+pub mod redis;
 pub mod sakila;
 
 pub static MYSQL_CONNECTIONS: Lazy<Mutex<HashMap<String, MySqlPool>>> =

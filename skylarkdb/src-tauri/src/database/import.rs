@@ -1,17 +1,14 @@
+use crate::database::mysql::escape_mysql_ident;
+use crate::models::*;
+use sqlx::{Executor, MySqlPool};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use sqlx::{MySqlPool, Executor};
-use crate::models::*;
-use crate::database::mysql::escape_mysql_ident;
 
 /// Type mapping from generic types to MySQL types
-pub fn map_type_to_mysql(
-    source_type: &str,
-    sample_value: Option<&str>,
-) -> String {
+pub fn map_type_to_mysql(source_type: &str, sample_value: Option<&str>) -> String {
     let source_lower = source_type.to_lowercase();
-    
+
     // Check explicit type hints first
     match source_lower.as_str() {
         "text" | "longtext" | "mediumtext" | "tinytext" => return "TEXT".to_string(),
@@ -30,18 +27,18 @@ pub fn map_type_to_mysql(
         "blob" | "binary" | "varbinary" => return "BLOB".to_string(),
         _ => {}
     }
-    
+
     // Infer from sample value if type is generic
     if let Some(value) = sample_value {
         if value.is_empty() {
             return "VARCHAR(255)".to_string();
         }
-        
+
         // Check for boolean
         if value == "true" || value == "false" {
             return "TINYINT(1)".to_string();
         }
-        
+
         // Check for integer
         if value.parse::<i64>().is_ok() {
             let num = value.parse::<i64>().unwrap();
@@ -55,30 +52,31 @@ pub fn map_type_to_mysql(
                 return "BIGINT".to_string();
             }
         }
-        
+
         // Check for float
         if value.parse::<f64>().is_ok() {
             return "DOUBLE".to_string();
         }
-        
+
         // Check for date
         if chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok() {
             return "DATE".to_string();
         }
-        
+
         // Check for datetime
         if chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S").is_ok() {
             return "DATETIME".to_string();
         }
-        
+
         // Check for JSON
-        if (value.starts_with('{') && value.ends_with('}')) ||
-           (value.starts_with('[') && value.ends_with(']')) {
+        if (value.starts_with('{') && value.ends_with('}'))
+            || (value.starts_with('[') && value.ends_with(']'))
+        {
             if serde_json::from_str::<serde_json::Value>(value).is_ok() {
                 return "JSON".to_string();
             }
         }
-        
+
         // Default to VARCHAR with length based on content
         let len = value.len();
         if len <= 255 {
@@ -89,40 +87,39 @@ pub fn map_type_to_mysql(
             return "LONGTEXT".to_string();
         }
     }
-    
+
     // Default fallback
     "VARCHAR(255)".to_string()
 }
 
 /// Parse JSON file and return table data
 pub fn parse_json_file(file_path: &Path) -> Result<serde_json::Value, String> {
-    let file = File::open(file_path)
-        .map_err(|e| format!("Failed to open file: {}", e))?;
-    
+    let file = File::open(file_path).map_err(|e| format!("Failed to open file: {}", e))?;
+
     let reader = BufReader::new(file);
-    let content: String = reader.lines()
+    let content: String = reader
+        .lines()
         .collect::<Result<String, _>>()
         .map_err(|e| format!("Failed to read file: {}", e))?;
-    
-    serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse JSON: {}", e))
+
+    serde_json::from_str(&content).map_err(|e| format!("Failed to parse JSON: {}", e))
 }
 
 /// Parse CSV file and return rows with headers
 pub fn parse_csv_file(file_path: &Path) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
-    let file = File::open(file_path)
-        .map_err(|e| format!("Failed to open file: {}", e))?;
-    
+    let file = File::open(file_path).map_err(|e| format!("Failed to open file: {}", e))?;
+
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
-    
+
     // Parse header
-    let header_line = lines.next()
+    let header_line = lines
+        .next()
         .ok_or("CSV file is empty")?
         .map_err(|e| format!("Failed to read header: {}", e))?;
-    
+
     let headers = parse_csv_line(&header_line);
-    
+
     // Parse data rows
     let mut rows = Vec::new();
     for line in lines {
@@ -131,7 +128,7 @@ pub fn parse_csv_file(file_path: &Path) -> Result<(Vec<String>, Vec<Vec<String>>
             rows.push(parse_csv_line(&line));
         }
     }
-    
+
     Ok((headers, rows))
 }
 
@@ -141,7 +138,7 @@ fn parse_csv_line(line: &str) -> Vec<String> {
     let mut current_field = String::new();
     let mut in_quotes = false;
     let mut chars = line.chars().peekable();
-    
+
     while let Some(c) = chars.next() {
         match c {
             '"' if in_quotes => {
@@ -165,7 +162,7 @@ fn parse_csv_line(line: &str) -> Vec<String> {
             }
         }
     }
-    
+
     fields.push(current_field);
     fields
 }
@@ -185,12 +182,12 @@ pub async fn create_table_from_mappings(
         escape_mysql_ident(database),
         escape_mysql_ident(table_name)
     );
-    
+
     let exists: (i64,) = sqlx::query_as(&check_query)
         .fetch_one(pool)
         .await
         .map_err(|e| format!("Failed to check table existence: {}", e))?;
-    
+
     if exists.0 > 0 {
         match on_conflict {
             OnConflictStrategy::Skip => {
@@ -208,62 +205,70 @@ pub async fn create_table_from_mappings(
                     .map_err(|e| format!("Failed to drop existing table: {}", e))?;
             }
             OnConflictStrategy::Error => {
-                return Err(format!("Table '{}.{}' already exists", database, table_name));
+                return Err(format!(
+                    "Table '{}.{}' already exists",
+                    database, table_name
+                ));
             }
         }
     }
-    
+
     // Build CREATE TABLE statement
-    let mut create_sql = format!("CREATE TABLE `{}`.`{}` (\n", 
+    let mut create_sql = format!(
+        "CREATE TABLE `{}`.`{}` (\n",
         escape_mysql_ident(database),
-        escape_mysql_ident(table_name));
-    
+        escape_mysql_ident(table_name)
+    );
+
     let mut column_defs = Vec::new();
     let mut primary_keys = Vec::new();
-    
+
     for mapping in column_mappings {
         let mysql_type = map_type_to_mysql(&mapping.target_type, mapping.default_value.as_deref());
-        
-        let mut col_def = format!("    `{}` {}", 
-            escape_mysql_ident(&mapping.target_column), 
-            mysql_type);
-        
+
+        let mut col_def = format!(
+            "    `{}` {}",
+            escape_mysql_ident(&mapping.target_column),
+            mysql_type
+        );
+
         if !mapping.is_nullable {
             col_def.push_str(" NOT NULL");
         }
-        
+
         if let Some(ref default) = mapping.default_value {
-            if mapping.target_type.to_lowercase() == "text" || 
-               mapping.target_type.to_lowercase() == "blob" ||
-               mapping.target_type.to_lowercase() == "json" {
+            if mapping.target_type.to_lowercase() == "text"
+                || mapping.target_type.to_lowercase() == "blob"
+                || mapping.target_type.to_lowercase() == "json"
+            {
                 // TEXT and BLOB can't have default values in MySQL
             } else {
                 col_def.push_str(&format!(" DEFAULT '{}'", escape_mysql_value(default)));
             }
         }
-        
+
         if mapping.is_primary_key {
             primary_keys.push(format!("`{}`", escape_mysql_ident(&mapping.target_column)));
         }
-        
+
         column_defs.push(col_def);
     }
-    
+
     create_sql.push_str(&column_defs.join(",\n"));
-    
+
     if !primary_keys.is_empty() {
         create_sql.push_str(",\n    PRIMARY KEY (");
         create_sql.push_str(&primary_keys.join(", "));
         create_sql.push(')');
     }
-    
+
     create_sql.push_str("\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    
+
     // Execute CREATE TABLE
     pool.execute(&*create_sql)
         .await
         .map_err(|e| format!("Failed to create table: {}", e))?;
-    
+
     Ok(())
 }
 
@@ -275,34 +280,34 @@ pub async fn import_json_data(
     column_mappings: &[ColumnMapping],
     json_data: serde_json::Value,
 ) -> Result<u64, String> {
-    let array = json_data.as_array()
-        .ok_or("JSON data must be an array")?;
-    
+    let array = json_data.as_array().ok_or("JSON data must be an array")?;
+
     let mut imported_rows = 0u64;
-    
+
     for (row_idx, row) in array.iter().enumerate() {
-        let obj = row.as_object()
+        let obj = row
+            .as_object()
             .ok_or_else(|| format!("Row {} is not an object", row_idx))?;
-        
+
         let mut columns = Vec::new();
         let mut placeholders = Vec::new();
         let mut values = Vec::new();
-        
+
         for mapping in column_mappings {
             if let Some(value) = obj.get(&mapping.source_column) {
                 columns.push(format!("`{}`", escape_mysql_ident(&mapping.target_column)));
                 placeholders.push("?".to_string());
-                
+
                 // Convert JSON value to SQL value
                 let sql_value = json_to_sql_value(value, &mapping.target_type);
                 values.push(sql_value);
             }
         }
-        
+
         if columns.is_empty() {
             continue;
         }
-        
+
         let insert_sql = format!(
             "INSERT INTO `{}`.`{}` ({}) VALUES ({})",
             escape_mysql_ident(database),
@@ -310,19 +315,20 @@ pub async fn import_json_data(
             columns.join(", "),
             placeholders.join(", ")
         );
-        
+
         let mut query = sqlx::query(&insert_sql);
         for value in &values {
             query = bind_sql_value(query, value);
         }
-        
-        query.execute(pool)
+
+        query
+            .execute(pool)
             .await
             .map_err(|e| format!("Failed to insert row {}: {}", row_idx, e))?;
-        
+
         imported_rows += 1;
     }
-    
+
     Ok(imported_rows)
 }
 
@@ -336,7 +342,7 @@ pub async fn import_csv_data(
     column_mappings: &[ColumnMapping],
 ) -> Result<u64, String> {
     let mut imported_rows = 0u64;
-    
+
     // Create column name to mapping lookup
     let mut column_lookup = std::collections::HashMap::new();
     for (i, header) in headers.iter().enumerate() {
@@ -344,27 +350,27 @@ pub async fn import_csv_data(
             column_lookup.insert(i, mapping);
         }
     }
-    
+
     for (row_idx, row) in rows.iter().enumerate() {
         let mut columns = Vec::new();
         let mut placeholders = Vec::new();
         let mut values = Vec::new();
-        
+
         for (col_idx, value) in row.iter().enumerate() {
             if let Some(mapping) = column_lookup.get(&col_idx) {
                 columns.push(format!("`{}`", escape_mysql_ident(&mapping.target_column)));
                 placeholders.push("?".to_string());
-                
+
                 // Convert string value to SQL value based on target type
                 let sql_value = string_to_sql_value(value, &mapping.target_type);
                 values.push(sql_value);
             }
         }
-        
+
         if columns.is_empty() {
             continue;
         }
-        
+
         let insert_sql = format!(
             "INSERT INTO `{}`.`{}` ({}) VALUES ({})",
             escape_mysql_ident(database),
@@ -372,26 +378,27 @@ pub async fn import_csv_data(
             columns.join(", "),
             placeholders.join(", ")
         );
-        
+
         let mut query = sqlx::query(&insert_sql);
         for value in &values {
             query = bind_sql_value(query, value);
         }
-        
-        query.execute(pool)
+
+        query
+            .execute(pool)
             .await
             .map_err(|e| format!("Failed to insert row {}: {}", row_idx, e))?;
-        
+
         imported_rows += 1;
     }
-    
+
     Ok(imported_rows)
 }
 
 /// Convert JSON value to SQL value string
 fn json_to_sql_value(value: &serde_json::Value, target_type: &str) -> String {
     let type_lower = target_type.to_lowercase();
-    
+
     match value {
         serde_json::Value::Null => "NULL".to_string(),
         serde_json::Value::Bool(b) => {
@@ -402,16 +409,23 @@ fn json_to_sql_value(value: &serde_json::Value, target_type: &str) -> String {
             }
         }
         serde_json::Value::Number(n) => {
-            if type_lower.contains("text") || type_lower.contains("char") || type_lower.contains("blob") {
+            if type_lower.contains("text")
+                || type_lower.contains("char")
+                || type_lower.contains("blob")
+            {
                 format!("'{}'", escape_mysql_value(&n.to_string()))
             } else {
                 n.to_string()
             }
         }
         serde_json::Value::String(s) => {
-            if type_lower.contains("int") || type_lower.contains("float") || 
-               type_lower.contains("double") || type_lower.contains("decimal") {
-                s.parse::<f64>().map_or("NULL".to_string(), |n| n.to_string())
+            if type_lower.contains("int")
+                || type_lower.contains("float")
+                || type_lower.contains("double")
+                || type_lower.contains("decimal")
+            {
+                s.parse::<f64>()
+                    .map_or("NULL".to_string(), |n| n.to_string())
             } else if type_lower == "json" {
                 // Validate JSON
                 if serde_json::from_str::<serde_json::Value>(s).is_ok() {
@@ -436,16 +450,22 @@ fn json_to_sql_value(value: &serde_json::Value, target_type: &str) -> String {
 /// Convert string value to SQL value
 fn string_to_sql_value(value: &str, target_type: &str) -> String {
     let type_lower = target_type.to_lowercase();
-    
+
     if value.is_empty() {
         return "NULL".to_string();
     }
-    
+
     if type_lower.contains("int") {
-        value.parse::<i64>().map_or("NULL".to_string(), |n| n.to_string())
-    } else if type_lower.contains("float") || type_lower.contains("double") || 
-              type_lower.contains("decimal") {
-        value.parse::<f64>().map_or("NULL".to_string(), |n| n.to_string())
+        value
+            .parse::<i64>()
+            .map_or("NULL".to_string(), |n| n.to_string())
+    } else if type_lower.contains("float")
+        || type_lower.contains("double")
+        || type_lower.contains("decimal")
+    {
+        value
+            .parse::<f64>()
+            .map_or("NULL".to_string(), |n| n.to_string())
     } else if type_lower == "bool" || type_lower.contains("tinyint(1)") {
         if value == "true" || value == "1" {
             "1".to_string()
@@ -472,7 +492,7 @@ fn bind_sql_value<'a>(
         query = query.bind(Option::<String>::None);
     } else if value.starts_with('\'') && value.ends_with('\'') {
         // String value
-        let s = &value[1..value.len()-1];
+        let s = &value[1..value.len() - 1];
         query = query.bind(s.to_string());
     } else {
         // Try as number
@@ -512,9 +532,9 @@ pub async fn import_database(
     let mut total_rows = 0u64;
     let mut imported_tables = 0u64;
     let mut errors = Vec::new();
-    
+
     let file_path = Path::new(&options.file_path);
-    
+
     match options.format {
         ImportFormat::Json => {
             // Parse JSON file
@@ -531,8 +551,9 @@ pub async fn import_database(
                         &mapping.target_table,
                         &mapping.column_mappings,
                         &options.on_conflict,
-                    ).await;
-                    
+                    )
+                    .await;
+
                     if let Err(e) = create_result {
                         errors.push(ImportError {
                             table: mapping.target_table.clone(),
@@ -547,7 +568,9 @@ pub async fn import_database(
                             &mapping.target_table,
                             &mapping.column_mappings,
                             json_data,
-                        ).await {
+                        )
+                        .await
+                        {
                             Ok(rows) => {
                                 total_rows += rows;
                                 imported_tables += 1;
@@ -573,8 +596,9 @@ pub async fn import_database(
                             &mapping.target_table,
                             &mapping.column_mappings,
                             &options.on_conflict,
-                        ).await;
-                        
+                        )
+                        .await;
+
                         if let Err(e) = create_result {
                             errors.push(ImportError {
                                 table: mapping.target_table.clone(),
@@ -583,7 +607,7 @@ pub async fn import_database(
                             });
                             continue;
                         }
-                        
+
                         // Import data
                         match import_json_data(
                             pool,
@@ -591,7 +615,9 @@ pub async fn import_database(
                             &mapping.target_table,
                             &mapping.column_mappings,
                             table_data.clone(),
-                        ).await {
+                        )
+                        .await
+                        {
                             Ok(rows) => {
                                 total_rows += rows;
                                 imported_tables += 1;
@@ -608,7 +634,7 @@ pub async fn import_database(
                 }
             }
         }
-        
+
         ImportFormat::Csv => {
             // Parse CSV file
             let (headers, rows) = parse_csv_file(file_path)?;
@@ -622,8 +648,9 @@ pub async fn import_database(
                     &mapping.target_table,
                     &mapping.column_mappings,
                     &options.on_conflict,
-                ).await;
-                
+                )
+                .await;
+
                 if let Err(e) = create_result {
                     errors.push(ImportError {
                         table: mapping.target_table.clone(),
@@ -638,7 +665,7 @@ pub async fn import_database(
                         errors,
                     });
                 }
-                
+
                 // Import data
                 match import_csv_data(
                     pool,
@@ -647,7 +674,9 @@ pub async fn import_database(
                     &headers,
                     &rows,
                     &mapping.column_mappings,
-                ).await {
+                )
+                .await
+                {
                     Ok(rows_count) => {
                         total_rows = rows_count;
                         imported_tables = 1;
@@ -662,34 +691,35 @@ pub async fn import_database(
                 }
             }
         }
-        
+
         ImportFormat::Sql => {
             // For SQL format, we execute the SQL file directly
-            let file = File::open(file_path)
-                .map_err(|e| format!("Failed to open SQL file: {}", e))?;
-            
+            let file =
+                File::open(file_path).map_err(|e| format!("Failed to open SQL file: {}", e))?;
+
             let reader = BufReader::new(file);
             let mut sql_content = String::new();
-            
+
             for line in reader.lines() {
                 let line = line.map_err(|e| format!("Failed to read SQL file: {}", e))?;
                 sql_content.push_str(&line);
                 sql_content.push('\n');
             }
-            
+
             // Split by semicolons and execute each statement
-            let statements: Vec<&str> = sql_content.split(';')
+            let statements: Vec<&str> = sql_content
+                .split(';')
                 .filter(|s| !s.trim().is_empty())
                 .collect();
-            
+
             for statement in statements {
                 if statement.trim().is_empty() {
                     continue;
                 }
-                
+
                 // Replace database name placeholder if needed
                 let statement = statement.replace("__DATABASE__", &options.database);
-                
+
                 if let Err(e) = pool.execute(&*statement).await {
                     errors.push(ImportError {
                         table: "unknown".to_string(),
@@ -702,14 +732,20 @@ pub async fn import_database(
             }
         }
     }
-    
+
     let success = errors.is_empty();
     let message = if success {
-        format!("Successfully imported {} tables with {} total rows", imported_tables, total_rows)
+        format!(
+            "Successfully imported {} tables with {} total rows",
+            imported_tables, total_rows
+        )
     } else {
-        format!("Import completed with errors: {} tables, {} rows imported", imported_tables, total_rows)
+        format!(
+            "Import completed with errors: {} tables, {} rows imported",
+            imported_tables, total_rows
+        )
     };
-    
+
     Ok(ImportResult {
         success,
         message,

@@ -61,4 +61,8 @@ const DialogTitle = React.forwardRef<
 ));
 DialogTitle.displayName = DialogPrimitive.Title.displayName;
 
-export { Dialog, DialogPortal, DialogTrigger, DialogClose, DialogContent, DialogHeader, DialogTitle };
+const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+  <div className={cn('flex items-center justify-end gap-2 border-t px-6 py-4', className)} {...props} />
+);
+
+export { Dialog, DialogPortal, DialogTrigger, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogFooter };

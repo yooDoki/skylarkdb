@@ -1,6 +1,6 @@
-use tauri::command;
 use crate::database::redis;
 use crate::models::*;
+use tauri::command;
 
 #[command]
 pub async fn connect_redis(connection: DatabaseConnection) -> Result<ConnectionResult, String> {
@@ -22,7 +22,10 @@ pub async fn disconnect_redis(connection_id: String) -> Result<(), String> {
 }
 
 #[command]
-pub async fn get_redis_keys(connection_id: String, pattern: String) -> Result<Vec<RedisKey>, String> {
+pub async fn get_redis_keys(
+    connection_id: String,
+    pattern: String,
+) -> Result<Vec<RedisKey>, String> {
     redis::get_keys(&connection_id, &pattern).await
 }
 

@@ -1,14 +1,18 @@
-use redis::Client;
-use redis::AsyncCommands;
-use crate::models::*;
 use crate::database::{REDIS_CONNECTIONS, REDIS_SELECTED_DATABASE};
+use crate::models::*;
+use redis::AsyncCommands;
+use redis::Client;
 
-async fn get_connection_for_db(connection_id: &str) -> Result<(redis::aio::MultiplexedConnection, i64), String> {
+async fn get_connection_for_db(
+    connection_id: &str,
+) -> Result<(redis::aio::MultiplexedConnection, i64), String> {
     let connections = REDIS_CONNECTIONS.lock().await;
-    let client = connections.get(connection_id)
+    let client = connections
+        .get(connection_id)
         .ok_or("Connection not found")?;
 
-    let mut con = client.get_multiplexed_async_connection()
+    let mut con = client
+        .get_multiplexed_async_connection()
         .await
         .map_err(|e| format!("Failed to get connection: {}", e))?;
 
@@ -26,7 +30,11 @@ async fn get_connection_for_db(connection_id: &str) -> Result<(redis::aio::Multi
 }
 
 pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult, String> {
-    let redis_url = if let Some(password) = connection.password.as_ref().filter(|s| !s.trim().is_empty()) {
+    let redis_url = if let Some(password) = connection
+        .password
+        .as_ref()
+        .filter(|s| !s.trim().is_empty())
+    {
         format!(
             "redis://:{}@{}:{}",
             password, connection.host, connection.port
@@ -68,17 +76,13 @@ pub async fn test_connection(
     };
 
     match Client::open(redis_url) {
-        Ok(client) => {
-            match client.get_multiplexed_async_connection().await {
-                Ok(_) => {
-                    Ok(ConnectionResult {
-                        success: true,
-                        message: "Connection successful!".to_string(),
-                    })
-                }
-                Err(e) => Err(format!("Connection failed: {}", e)),
-            }
-        }
+        Ok(client) => match client.get_multiplexed_async_connection().await {
+            Ok(_) => Ok(ConnectionResult {
+                success: true,
+                message: "Connection successful!".to_string(),
+            }),
+            Err(e) => Err(format!("Connection failed: {}", e)),
+        },
         Err(e) => Err(format!("Failed to create client: {}", e)),
     }
 }
@@ -161,33 +165,46 @@ async fn get_key_size(
 pub async fn get_value(connection_id: &str, key: &str) -> Result<String, String> {
     let (mut con, _db_index) = get_connection_for_db(connection_id).await?;
 
-    let key_type: String = redis::cmd("TYPE").arg(key).query_async(&mut con).await
+    let key_type: String = redis::cmd("TYPE")
+        .arg(key)
+        .query_async(&mut con)
+        .await
         .unwrap_or_else(|_| "none".to_string());
 
     let value = match key_type.as_str() {
         "string" => {
-            let value: Option<String> = con.get(key).await
+            let value: Option<String> = con
+                .get(key)
+                .await
                 .map_err(|e| format!("Failed to get value: {}", e))?;
             value.unwrap_or_else(|| "nil".to_string())
         }
         "hash" => {
-            let pairs: Vec<(String, String)> = con.hgetall(key).await
+            let pairs: Vec<(String, String)> = con
+                .hgetall(key)
+                .await
                 .map_err(|e| format!("Failed to get hash: {}", e))?;
             let hash_map: std::collections::HashMap<String, String> = pairs.into_iter().collect();
             serde_json::to_string(&hash_map).map_err(|e| e.to_string())?
         }
         "list" => {
-            let items: Vec<String> = con.lrange(key, 0, 99).await
+            let items: Vec<String> = con
+                .lrange(key, 0, 99)
+                .await
                 .map_err(|e| format!("Failed to get list: {}", e))?;
             serde_json::to_string(&items).map_err(|e| e.to_string())?
         }
         "set" => {
-            let items: Vec<String> = con.smembers(key).await
+            let items: Vec<String> = con
+                .smembers(key)
+                .await
                 .map_err(|e| format!("Failed to get set: {}", e))?;
             serde_json::to_string(&items).map_err(|e| e.to_string())?
         }
         "zset" => {
-            let items: Vec<(String, f64)> = con.zrangebyscore_withscores(key, "-inf", "+inf").await
+            let items: Vec<(String, f64)> = con
+                .zrangebyscore_withscores(key, "-inf", "+inf")
+                .await
                 .map_err(|e| format!("Failed to get zset: {}", e))?;
             serde_json::to_string(&items).map_err(|e| e.to_string())?
         }
@@ -200,7 +217,9 @@ pub async fn get_value(connection_id: &str, key: &str) -> Result<String, String>
 pub async fn delete_key(connection_id: &str, key: &str) -> Result<bool, String> {
     let (mut con, _db_index) = get_connection_for_db(connection_id).await?;
 
-    let result: i32 = con.del(key).await
+    let result: i32 = con
+        .del(key)
+        .await
         .map_err(|e| format!("Failed to delete key: {}", e))?;
 
     Ok(result > 0)
@@ -208,15 +227,19 @@ pub async fn delete_key(connection_id: &str, key: &str) -> Result<bool, String> 
 
 pub async fn get_info(connection_id: &str) -> Result<RedisInfo, String> {
     let connections = REDIS_CONNECTIONS.lock().await;
-    let client = connections.get(connection_id)
+    let client = connections
+        .get(connection_id)
         .ok_or("Connection not found")?;
-    
-    let mut con = client.get_multiplexed_async_connection()
+
+    let mut con = client
+        .get_multiplexed_async_connection()
         .await
         .map_err(|e| format!("Failed to get connection: {}", e))?;
 
     // Get INFO command output
-    let info: String = redis::cmd("INFO").query_async(&mut con).await
+    let info: String = redis::cmd("INFO")
+        .query_async(&mut con)
+        .await
         .map_err(|e| format!("Failed to get info: {}", e))?;
 
     // Parse INFO output
@@ -229,12 +252,12 @@ pub async fn get_info(connection_id: &str) -> Result<RedisInfo, String> {
         if line.starts_with('#') || line.trim().is_empty() {
             continue;
         }
-        
+
         let parts: Vec<&str> = line.split(':').collect();
         if parts.len() == 2 {
             let key = parts[0].trim();
             let value = parts[1].trim();
-            
+
             match key {
                 "redis_version" => version = value.to_string(),
                 "os" => os = value.to_string(),
@@ -256,7 +279,9 @@ pub async fn get_info(connection_id: &str) -> Result<RedisInfo, String> {
             for line in info_str.lines() {
                 if line.starts_with("db") {
                     if let Some(keys_part) = line.split(':').nth(1) {
-                        if let Some(keys_part) = keys_part.split(',').find(|s| s.starts_with("keys=")) {
+                        if let Some(keys_part) =
+                            keys_part.split(',').find(|s| s.starts_with("keys="))
+                        {
                             if let Some(keys_str) = keys_part.strip_prefix("keys=") {
                                 if let Ok(size) = keys_str.parse::<i64>() {
                                     sizes.push(size);
@@ -285,10 +310,12 @@ pub async fn get_info(connection_id: &str) -> Result<RedisInfo, String> {
 /// 获取所有数据库的信息
 pub async fn get_databases(connection_id: &str) -> Result<Vec<RedisDatabase>, String> {
     let connections = REDIS_CONNECTIONS.lock().await;
-    let client = connections.get(connection_id)
+    let client = connections
+        .get(connection_id)
         .ok_or("Connection not found")?;
 
-    let mut con = client.get_multiplexed_async_connection()
+    let mut con = client
+        .get_multiplexed_async_connection()
         .await
         .map_err(|e| format!("Failed to get connection: {}", e))?;
 
@@ -332,10 +359,12 @@ pub async fn get_databases(connection_id: &str) -> Result<Vec<RedisDatabase>, St
 /// 切换数据库
 pub async fn select_database(connection_id: &str, db_index: i64) -> Result<(), String> {
     let connections = REDIS_CONNECTIONS.lock().await;
-    let client = connections.get(connection_id)
+    let client = connections
+        .get(connection_id)
         .ok_or("Connection not found")?;
-    
-    let mut con = client.get_multiplexed_async_connection()
+
+    let mut con = client
+        .get_multiplexed_async_connection()
         .await
         .map_err(|e| format!("Failed to get connection: {}", e))?;
 
@@ -345,12 +374,12 @@ pub async fn select_database(connection_id: &str, db_index: i64) -> Result<(), S
         .query_async(&mut con)
         .await
         .map_err(|e| format!("Failed to select database: {}", e))?;
-    
+
     // 更新选中的数据库索引
     drop(connections);
     let mut selected_db = REDIS_SELECTED_DATABASE.lock().await;
     selected_db.insert(connection_id.to_string(), db_index);
-    
+
     Ok(())
 }
 

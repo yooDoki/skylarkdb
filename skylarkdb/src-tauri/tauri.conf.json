@@ -8,7 +8,7 @@
   },
   "identifier": "com.skylarkdb.app",
   "productName": "SkylarkDB",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "app": {
     "security": {
       "csp": null
@@ -54,6 +54,14 @@
       "digestAlgorithm": "sha256",
       "timestampUrl": ""
     }
+  },
+  "updater": {
+    "active": true,
+    "endpoints": [
+      "https://github.com/yourusername/skylarkdb/releases/latest/download/latest.json"
+    ],
+    "dialog": true,
+    "pubkey": "your-public-key-here"
   },
   "plugins": {
     "shell": {

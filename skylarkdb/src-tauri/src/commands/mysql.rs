@@ -1,6 +1,6 @@
-use tauri::command;
-use crate::database::{mysql, export, import, sakila};
+use crate::database::{export, import, mysql, sakila};
 use crate::models::*;
+use tauri::command;
 
 #[command]
 pub async fn connect_mysql(connection: DatabaseConnection) -> Result<ConnectionResult, String> {
@@ -56,17 +56,27 @@ pub async fn get_mysql_tables(connection_id: String) -> Result<Vec<MySQLTable>, 
 }
 
 #[command]
-pub async fn get_mysql_columns(connection_id: String, table_name: String) -> Result<Vec<MySQLColumn>, String> {
+pub async fn get_mysql_columns(
+    connection_id: String,
+    table_name: String,
+) -> Result<Vec<MySQLColumn>, String> {
     mysql::get_columns(&connection_id, &table_name).await
 }
 
 #[command]
-pub async fn get_mysql_routines(connection_id: String, routine_type: Option<String>) -> Result<Vec<MySQLRoutine>, String> {
+pub async fn get_mysql_routines(
+    connection_id: String,
+    routine_type: Option<String>,
+) -> Result<Vec<MySQLRoutine>, String> {
     mysql::get_routines(&connection_id, routine_type.as_deref()).await
 }
 
 #[command]
-pub async fn execute_mysql_query(connection_id: String, query: String, params: Option<Vec<String>>) -> Result<QueryResult, String> {
+pub async fn execute_mysql_query(
+    connection_id: String,
+    query: String,
+    params: Option<Vec<String>>,
+) -> Result<QueryResult, String> {
     mysql::execute_query(&connection_id, &query, params).await
 }
 
@@ -87,7 +97,14 @@ pub async fn update_mysql_record(
     primary_key: String,
     primary_value: serde_json::Value,
 ) -> Result<u64, String> {
-    mysql::update_record(&connection_id, &table_name, data, &primary_key, primary_value).await
+    mysql::update_record(
+        &connection_id,
+        &table_name,
+        data,
+        &primary_key,
+        primary_value,
+    )
+    .await
 }
 
 #[command]
@@ -106,9 +123,12 @@ pub async fn delete_mysql_record(
 pub async fn export_mysql_data(options: ExportOptions) -> Result<ExportResult, String> {
     let pool = {
         let connections = crate::database::MYSQL_CONNECTIONS.lock().await;
-        connections.get(&options.connection_id).cloned().ok_or("Connection not found")?
+        connections
+            .get(&options.connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
     };
-    
+
     export::export_database(&pool, &options).await
 }
 
@@ -116,9 +136,12 @@ pub async fn export_mysql_data(options: ExportOptions) -> Result<ExportResult, S
 pub async fn import_mysql_data(options: ImportOptions) -> Result<ImportResult, String> {
     let pool = {
         let connections = crate::database::MYSQL_CONNECTIONS.lock().await;
-        connections.get(&options.connection_id).cloned().ok_or("Connection not found")?
+        connections
+            .get(&options.connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
     };
-    
+
     import::import_database(&pool, &options).await
 }
 

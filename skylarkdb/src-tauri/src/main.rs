@@ -4,12 +4,13 @@ mod commands;
 mod database;
 mod models;
 
-use tauri::Manager;
 use tauri::LogicalSize;
+use tauri::Manager;
 use tauri::Size;
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             commands::mysql::connect_mysql,
