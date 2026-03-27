@@ -169,37 +169,6 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     }
   }, [activeConnection.connection?.id, selectedDatabase, loadTables, viewingTable, deleteTableName]);
 
-  const handleAddColumnSuccess = useCallback(() => {
-    if (viewingTable) {
-      setTableColumns(prev => {
-        const next = new Map(prev);
-        next.delete(viewingTable);
-        return next;
-      });
-      tableCache.current.clear();
-      if (activeConnection.connection?.id) {
-        loadTableColumns(viewingTable);
-        loadTableData(viewingTable, currentPage);
-      }
-    }
-  }, [viewingTable, currentPage, activeConnection.connection?.id, loadTableColumns, loadTableData]);
-
-  const handleDropColumnSuccess = useCallback(() => {
-    if (viewingTable) {
-      setTableColumns(prev => {
-        const next = new Map(prev);
-        next.delete(viewingTable);
-        return next;
-      });
-      tableCache.current.clear();
-      if (activeConnection.connection?.id) {
-        loadTableColumns(viewingTable);
-        loadTableData(viewingTable, currentPage);
-      }
-    }
-    setDropColumnInfo(null);
-  }, [viewingTable, currentPage, activeConnection.connection?.id, loadTableColumns, loadTableData]);
-
   const loadTableData = useCallback(async (
     tableName: string,
     page: number,
@@ -247,6 +216,37 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
       }
     }
   }, [activeConnection.connection?.id, pageSize]);
+
+  const handleAddColumnSuccess = useCallback(() => {
+    if (viewingTable) {
+      setTableColumns(prev => {
+        const next = new Map(prev);
+        next.delete(viewingTable);
+        return next;
+      });
+      tableCache.current.clear();
+      if (activeConnection.connection?.id) {
+        loadTableColumns(viewingTable);
+        loadTableData(viewingTable, currentPage);
+      }
+    }
+  }, [viewingTable, currentPage, activeConnection.connection?.id, loadTableColumns, loadTableData]);
+
+  const handleDropColumnSuccess = useCallback(() => {
+    if (viewingTable) {
+      setTableColumns(prev => {
+        const next = new Map(prev);
+        next.delete(viewingTable);
+        return next;
+      });
+      tableCache.current.clear();
+      if (activeConnection.connection?.id) {
+        loadTableColumns(viewingTable);
+        loadTableData(viewingTable, currentPage);
+      }
+    }
+    setDropColumnInfo(null);
+  }, [viewingTable, currentPage, activeConnection.connection?.id, loadTableColumns, loadTableData]);
 
   useEffect(() => {
     if (viewingTable && !tableColumns.has(viewingTable) && !loadingColumns.has(viewingTable)) {
