@@ -15,6 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/
 import { ScrollArea } from './ui/scroll-area';
 import { UpdateChecker } from './UpdateChecker';
 import { useSettings, type ThemeMode } from '@/hooks/useSettings';
+import { getVersion } from '@tauri-apps/api/app';
+import { useState, useEffect } from 'react';
 import {
   Settings,
   Info,
@@ -41,6 +43,11 @@ export function SettingsDialog({ open: controlledOpen, onOpenChange, trigger }: 
   const [internalOpen, setInternalOpen] = useState(false);
   const { settings, updateSetting, resetSettings, isLoaded } = useSettings();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>('');
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => setAppVersion('unknown'));
+  }, []);
 
   const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen;
   const setOpen = onOpenChange || setInternalOpen;
@@ -403,7 +410,7 @@ export function SettingsDialog({ open: controlledOpen, onOpenChange, trigger }: 
                       <CardContent className="p-0">
                         <div className="flex items-center justify-between py-3 px-4 border-b border-border">
                           <span className="text-sm text-muted-foreground">版本</span>
-                          <span className="text-sm font-mono font-medium">v0.1.3</span>
+                          <span className="text-sm font-mono font-medium">v{appVersion || '...'}</span>
                         </div>
                         <div className="flex items-center justify-between py-3 px-4 border-b border-border">
                           <span className="text-sm text-muted-foreground">许可证</span>
