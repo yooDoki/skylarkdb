@@ -29,6 +29,7 @@ pub struct MySQLTable {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MySQLColumn {
     pub name: String,
     pub full_type: String,
