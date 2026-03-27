@@ -19,6 +19,8 @@ export async function testMySQLConnection(params: {
   password?: string;
   database?: string;
   ssl?: boolean;
+  connectionId?: string;
+  useStoredSecret?: boolean;
 }): Promise<ConnectionResult> {
   return invoke<ConnectionResult>('test_mysql_connection', {
     host: params.host,
@@ -27,6 +29,8 @@ export async function testMySQLConnection(params: {
     password: params.password?.trim() === '' ? null : params.password || null,
     database: params.database?.trim() === '' ? null : params.database || null,
     ssl: params.ssl || false,
+    connectionId: params.connectionId ?? null,
+    useStoredSecret: params.useStoredSecret ?? false,
   });
 }
 
@@ -34,11 +38,15 @@ export async function testRedisConnection(params: {
   host: string;
   port: number;
   password?: string;
+  connectionId?: string;
+  useStoredSecret?: boolean;
 }): Promise<ConnectionResult> {
   return invoke<ConnectionResult>('test_redis_connection', {
     host: params.host,
     port: params.port,
     password: params.password?.trim() === '' ? null : params.password || null,
+    connectionId: params.connectionId ?? null,
+    useStoredSecret: params.useStoredSecret ?? false,
   });
 }
 
@@ -48,6 +56,14 @@ export async function connectMySQL(connection: DatabaseConnection): Promise<Conn
 
 export async function connectRedis(connection: DatabaseConnection): Promise<ConnectionResult> {
   return invoke<ConnectionResult>('connect_redis', { connection });
+}
+
+export async function saveConnectionPassword(connectionId: string, password: string): Promise<void> {
+  return invoke<void>('save_connection_password', { connectionId, password });
+}
+
+export async function deleteConnectionPassword(connectionId: string): Promise<void> {
+  return invoke<void>('delete_connection_password', { connectionId });
 }
 
 export async function disconnectMySQL(connectionId: string): Promise<void> {
@@ -124,19 +140,17 @@ export async function updateMySQLRecord(
   connectionId: string,
   tableName: string,
   data: Record<string, any>,
-  primaryKey: string,
-  primaryValue: any
+  recordLocator: Record<string, any>
 ): Promise<number> {
-  return invoke<number>('update_mysql_record', { connectionId, tableName, data, primaryKey, primaryValue });
+  return invoke<number>('update_mysql_record', { connectionId, tableName, data, recordLocator });
 }
 
 export async function deleteMySQLRecord(
   connectionId: string,
   tableName: string,
-  primaryKey: string,
-  primaryValue: any
+  recordLocator: Record<string, any>
 ): Promise<number> {
-  return invoke<number>('delete_mysql_record', { connectionId, tableName, primaryKey, primaryValue });
+  return invoke<number>('delete_mysql_record', { connectionId, tableName, recordLocator });
 }
 
 export async function createMySQLTable(

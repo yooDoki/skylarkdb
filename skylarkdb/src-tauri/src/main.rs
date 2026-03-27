@@ -3,6 +3,7 @@
 mod commands;
 mod database;
 mod models;
+mod secrets;
 
 use tauri::LogicalSize;
 use tauri::Manager;
@@ -37,6 +38,8 @@ fn main() {
             commands::mysql::generate_sakila_docker_compose,
             commands::mysql::get_sakila_schema,
             commands::mysql::get_sakila_data,
+            commands::secrets::save_connection_password,
+            commands::secrets::delete_connection_password,
             commands::redis::connect_redis,
             commands::redis::test_redis_connection,
             commands::redis::disconnect_redis,

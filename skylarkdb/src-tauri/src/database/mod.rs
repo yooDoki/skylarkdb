@@ -3,6 +3,8 @@ use sqlx::MySqlPool;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 
+use crate::models::DatabaseConnection;
+
 pub mod export;
 pub mod import;
 pub mod mysql;
@@ -14,6 +16,9 @@ pub static MYSQL_CONNECTIONS: Lazy<Mutex<HashMap<String, MySqlPool>>> =
 
 /// 连接配置里填写的默认数据库名（非空时，执行 SQL 前在同一连接上 `USE`，避免 1046 No database selected）
 pub static MYSQL_DEFAULT_DATABASE: Lazy<Mutex<HashMap<String, Option<String>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+pub static CONNECTION_CONFIGS: Lazy<Mutex<HashMap<String, DatabaseConnection>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
 // Redis connection type

@@ -12,8 +12,17 @@ pub async fn test_redis_connection(
     host: String,
     port: u16,
     password: Option<String>,
+    connection_id: Option<String>,
+    use_stored_secret: Option<bool>,
 ) -> Result<ConnectionResult, String> {
-    redis::test_connection(&host, port, &password).await
+    redis::test_connection(
+        &host,
+        port,
+        &password,
+        connection_id.as_deref(),
+        use_stored_secret.unwrap_or(false),
+    )
+    .await
 }
 
 #[command]

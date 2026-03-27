@@ -23,6 +23,7 @@ import {
 
 export function RedisExplorer() {
   const { activeConnection } = useConnectionStore();
+  const isReadOnly = !!activeConnection.connection?.readOnly;
   const [keys, setKeys] = useState<RedisKey[]>([]);
   const [searchPattern, setSearchPattern] = useState('*');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -123,6 +124,7 @@ export function RedisExplorer() {
   };
 
   const handleDeleteKey = async (key: string) => {
+    if (isReadOnly) return;
     if (!confirm(`确定要删除键 "${key}" 吗？`)) return;
     
     try {
@@ -343,6 +345,7 @@ export function RedisExplorer() {
                     e.stopPropagation();
                     handleDeleteKey(key.key);
                   }}
+                  disabled={isReadOnly}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -428,6 +431,11 @@ export function RedisExplorer() {
                       <span className="text-xs text-muted-foreground">
                         {formatBytes(keys.find(k => k.key === selectedKey)?.size || 0)}
                       </span>
+                      {isReadOnly && (
+                        <Badge variant="outline" className="text-[10px] border-amber-200 bg-amber-50 text-amber-700">
+                          只读
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -460,6 +468,7 @@ export function RedisExplorer() {
                     variant="destructive"
                     className="h-8 rounded-lg"
                     onClick={() => handleDeleteKey(selectedKey)}
+                    disabled={isReadOnly}
                   >
                     <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                     删除

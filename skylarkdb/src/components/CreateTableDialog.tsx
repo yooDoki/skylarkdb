@@ -27,6 +27,7 @@ interface CreateTableDialogProps {
 
 export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTableDialogProps) {
   const { activeConnection, selectedDatabase } = useConnectionStore();
+  const isReadOnly = !!activeConnection.connection?.readOnly;
   const [tableName, setTableName] = useState('');
   const [columns, setColumns] = useState<CreateTableColumn[]>([
     { name: '', dataType: 'INT', nullable: true, defaultValue: undefined, autoIncrement: false, isPrimaryKey: false }
@@ -65,6 +66,10 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
 
   const handleCreate = async () => {
     if (!activeConnection.connection?.id || !selectedDatabase) return;
+    if (isReadOnly) {
+      setError('当前连接为只读模式，不能创建数据表');
+      return;
+    }
     if (!tableName.trim()) {
       setError('请输入表名');
       return;
@@ -128,7 +133,7 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">列定义</label>
-              <Button variant="outline" size="sm" onClick={addColumn}>
+              <Button variant="outline" size="sm" onClick={addColumn} disabled={isReadOnly}>
                 <Plus className="h-3 w-3 mr-1" />
                 添加列
               </Button>
@@ -188,7 +193,7 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
                     size="icon"
                     className="h-8 w-8 flex-shrink-0"
                     onClick={() => removeColumn(index)}
-                    disabled={columns.length === 1}
+                    disabled={isReadOnly || columns.length === 1}
                   >
                     <Trash2 className="h-3 w-3 text-destructive" />
                   </Button>
@@ -225,7 +230,7 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>取消</Button>
-          <Button onClick={handleCreate} disabled={isCreating} className="bg-mysql hover:bg-mysql/90">
+          <Button onClick={handleCreate} disabled={isCreating || isReadOnly} className="bg-mysql hover:bg-mysql/90">
             {isCreating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             创建表
           </Button>

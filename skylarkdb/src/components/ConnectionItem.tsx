@@ -124,6 +124,11 @@ export const ConnectionItem = memo(function ConnectionItem({
           )}>
             {connection.name}
           </span>
+          {connection.readOnly && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 bg-amber-500/10 text-amber-600">
+              只读
+            </span>
+          )}
           <span className={cn(
             "text-[10px] px-1.5 py-0.5 rounded font-medium uppercase flex-shrink-0",
             connection.type === 'mysql'

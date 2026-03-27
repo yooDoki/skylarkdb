@@ -10,7 +10,13 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DatabaseConnection } from '@/types';
 import { Database, Plus, Search, Filter, X, Play, Settings } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import { connectMySQL, connectRedis, disconnectMySQL, disconnectRedis } from '@/utils/api';
+import {
+  connectMySQL,
+  connectRedis,
+  deleteConnectionPassword,
+  disconnectMySQL,
+  disconnectRedis,
+} from '@/utils/api';
 
 type SortField = 'name' | 'type' | 'host' | 'createdAt' | 'updatedAt';
 type SortOrder = 'asc' | 'desc';
@@ -37,7 +43,8 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
     addConnection,
     deleteConnection, 
     setActiveConnection, 
-    setConnectionStatus 
+    setConnectionStatus,
+    updateConnection,
   } = useConnectionStore();
   
   const [showForm, setShowForm] = useState(false);
@@ -156,9 +163,13 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
         setConnectionStatus('error', result.message);
       }
     } catch (error) {
-      setConnectionStatus('error', error instanceof Error ? error.message : 'Connection failed');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('系统钥匙串中没有找到该连接的已保存密码')) {
+        updateConnection(connection.id, { hasPassword: false });
+      }
+      setConnectionStatus('error', errorMessage);
     }
-  }, [setActiveConnection, setConnectionStatus]);
+  }, [setActiveConnection, setConnectionStatus, updateConnection]);
 
   const handleDisconnect = useCallback(async () => {
     const currentConnection = activeConnection.connection;
@@ -190,18 +201,43 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
     setDeleteConfirm({ open: true, id });
   }, []);
 
-  const handleConfirmDelete = useCallback(() => {
+  const handleConfirmDelete = useCallback(async () => {
     if (deleteConfirm.id) {
+      const targetConnection = connections.find((connection) => connection.id === deleteConfirm.id);
+
+      if (activeConnection.connection?.id === deleteConfirm.id) {
+        try {
+          if (activeConnection.connection.type === 'mysql') {
+            await disconnectMySQL(activeConnection.connection.id);
+          } else {
+            await disconnectRedis(activeConnection.connection.id);
+          }
+        } catch (error) {
+          console.error('Failed to disconnect active connection before delete:', error);
+        }
+      }
+
+      if (targetConnection?.passwordStorage === 'system' && targetConnection.hasPassword) {
+        await deleteConnectionPassword(deleteConfirm.id).catch((error) => {
+          console.error('Failed to delete saved password:', error);
+        });
+      }
+
       deleteConnection(deleteConfirm.id);
     }
     setDeleteConfirm({ open: false, id: null });
-  }, [deleteConfirm.id, deleteConnection]);
+  }, [activeConnection.connection, connections, deleteConfirm.id, deleteConnection]);
 
   const handleDuplicate = useCallback((connection: DatabaseConnection) => {
     const { id, createdAt, updatedAt, ...rest } = connection;
+    const shouldCopyLocalPassword = (connection.passwordStorage ?? 'local') === 'local' && !!connection.password?.trim();
+
     addConnection({
       ...rest,
       name: `${connection.name} (副本)`,
+      passwordStorage: 'local',
+      hasPassword: shouldCopyLocalPassword,
+      password: shouldCopyLocalPassword ? connection.password : undefined,
     });
   }, [addConnection]);
 

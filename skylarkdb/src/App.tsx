@@ -16,7 +16,8 @@ import { connectMySQL, connectRedis } from '@/utils/api';
 type ViewMode = 'explorer' | 'query';
 
 function App() {
-  const { activeConnection, setConnectionStatus } = useConnectionStore();
+  const shouldAutoCheckUpdates = !import.meta.env.DEV;
+  const { activeConnection, setConnectionStatus, updateConnection } = useConnectionStore();
   const { collapsed, toggle } = useSidebarStore();
   const { settings, isLoaded } = useSettings();
   const [mounted, setMounted] = useState(false);
@@ -51,9 +52,13 @@ function App() {
         setConnectionStatus('error', result.message);
       }
     } catch (error) {
-      setConnectionStatus('error', error instanceof Error ? error.message : 'Connection failed');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('系统钥匙串中没有找到该连接的已保存密码')) {
+        updateConnection(connection.id, { hasPassword: false });
+      }
+      setConnectionStatus('error', errorMessage);
     }
-  }, [activeConnection.connection, setConnectionStatus, settings.connectionTimeout]);
+  }, [activeConnection.connection, setConnectionStatus, settings.connectionTimeout, updateConnection]);
 
   useEffect(() => {
     if (!isLoaded || !settings.autoReconnect || !activeConnection.connection || activeConnection.status !== 'disconnected') {
@@ -113,7 +118,7 @@ function App() {
     <div className="h-screen flex flex-col bg-background">
       {/* Hidden component to auto-check updates on startup */}
       <div className="hidden">
-        <UpdateChecker autoCheck={true} />
+        <UpdateChecker autoCheck={shouldAutoCheckUpdates} />
       </div>
 
       {/* Main Content */}

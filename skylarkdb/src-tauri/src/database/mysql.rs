@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::database::{MYSQL_CONNECTIONS, MYSQL_DEFAULT_DATABASE};
+use crate::{
+    database::{CONNECTION_CONFIGS, MYSQL_CONNECTIONS, MYSQL_DEFAULT_DATABASE},
+    secrets,
+};
 use crate::models::*;
 use sqlx::{
     mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode},
@@ -147,6 +150,50 @@ async fn load_column_meta(
     Ok(map)
 }
 
+fn sanitize_connection_config(connection: &DatabaseConnection) -> DatabaseConnection {
+    let mut sanitized = connection.clone();
+    sanitized.password = None;
+    sanitized
+}
+
+async fn is_connection_read_only(connection_id: &str) -> Result<bool, String> {
+    let configs = CONNECTION_CONFIGS.lock().await;
+    let connection = configs
+        .get(connection_id)
+        .ok_or("Connection not found")?;
+    Ok(connection.read_only)
+}
+
+async fn ensure_connection_writable(connection_id: &str) -> Result<(), String> {
+    if is_connection_read_only(connection_id).await? {
+        return Err("当前连接为只读模式，已禁止写入或结构变更操作".to_string());
+    }
+    Ok(())
+}
+
+fn query_allowed_in_read_only_mode(query: &str) -> bool {
+    let trimmed = query.trim_start();
+    let upper = trimmed.to_uppercase();
+    upper.starts_with("SELECT")
+        || upper.starts_with("SHOW")
+        || upper.starts_with("DESCRIBE")
+        || upper.starts_with("DESC ")
+        || upper.starts_with("EXPLAIN")
+        || upper.starts_with("WITH")
+}
+
+fn format_connect_error(prefix: &str, user: &str, host: &str, port: u16, raw_error: &str) -> String {
+    if raw_error.contains("1045") {
+        return format!(
+            "{prefix}: {raw_error}\n连接目标: user={user}, host={host}, port={port}\n排查建议: 1) 确认这套 MySQL 实例上该用户密码是否正确 2) 若使用 root，尝试将主机从 localhost 改为 127.0.0.1 3) 检查账号 host 限制（如 root@localhost 与 root@127.0.0.1）"
+        );
+    }
+
+    format!(
+        "{prefix}: {raw_error}\n连接目标: user={user}, host={host}, port={port}"
+    )
+}
+
 fn escape_mysql_like_pattern(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 8);
     for c in s.chars() {
@@ -225,17 +272,23 @@ pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult
         .as_deref()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or("root");
-    let password = connection
+    let password = if let Some(password) = connection
         .password
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or("");
+    {
+        password.to_string()
+    } else if connection.has_password {
+        secrets::require_connection_password(&connection.id)?
+    } else {
+        String::new()
+    };
 
     let mut opts = MySqlConnectOptions::new()
         .host(&connection.host)
         .port(connection.port)
         .username(username)
-        .password(password)
+        .password(&password)
         .statement_cache_capacity(0);
 
     if connection.ssl {
@@ -257,7 +310,7 @@ pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult
         .idle_timeout(std::time::Duration::from_secs(600))
         .connect_with(opts)
         .await
-        .map_err(|e| format!("Failed to connect: {}", e))?;
+        .map_err(|e| format_connect_error("Failed to connect", username, &connection.host, connection.port, &e.to_string()))?;
 
     {
         let mut connections = MYSQL_CONNECTIONS.lock().await;
@@ -276,6 +329,11 @@ pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult
         );
     }
 
+    {
+        let mut configs = CONNECTION_CONFIGS.lock().await;
+        configs.insert(connection.id.clone(), sanitize_connection_config(connection));
+    }
+
     Ok(ConnectionResult {
         success: true,
         message: "Connected successfully".to_string(),
@@ -289,21 +347,33 @@ pub async fn test_connection(
     password: &Option<String>,
     database: &Option<String>,
     ssl: bool,
+    connection_id: Option<&str>,
+    use_stored_secret: bool,
 ) -> Result<ConnectionResult, String> {
     let user = username
         .as_deref()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or("root");
-    let pass = password
+    let pass = if let Some(pass) = password
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or("");
+    {
+        pass.to_string()
+    } else if use_stored_secret {
+        if let Some(connection_id) = connection_id {
+            secrets::require_connection_password(connection_id)?
+        } else {
+            return Err("缺少连接 ID，无法读取系统钥匙串中的密码".to_string());
+        }
+    } else {
+        String::new()
+    };
 
     let mut opts = MySqlConnectOptions::new()
         .host(host)
         .port(port)
         .username(user)
-        .password(pass)
+        .password(&pass)
         .statement_cache_capacity(0);
 
     if ssl {
@@ -323,7 +393,7 @@ pub async fn test_connection(
         .acquire_timeout(std::time::Duration::from_secs(10))
         .connect_with(opts)
         .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
+        .map_err(|e| format_connect_error("Connection failed", user, host, port, &e.to_string()))?;
 
     pool.close().await;
 
@@ -341,6 +411,9 @@ pub async fn disconnect(connection_id: &str) -> Result<(), String> {
     drop(connections);
     let mut meta = MYSQL_DEFAULT_DATABASE.lock().await;
     meta.remove(connection_id);
+    drop(meta);
+    let mut configs = CONNECTION_CONFIGS.lock().await;
+    configs.remove(connection_id);
     Ok(())
 }
 
@@ -769,6 +842,8 @@ pub async fn insert_record(
     table_name: &str,
     data: serde_json::Value,
 ) -> Result<u64, String> {
+    ensure_connection_writable(connection_id).await?;
+
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
         connections
@@ -819,9 +894,10 @@ pub async fn update_record(
     connection_id: &str,
     table_name: &str,
     data: serde_json::Value,
-    primary_key: &str,
-    primary_value: serde_json::Value,
+    record_locator: serde_json::Value,
 ) -> Result<u64, String> {
+    ensure_connection_writable(connection_id).await?;
+
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
         connections
@@ -840,32 +916,46 @@ pub async fn update_record(
     set_default_database(connection_id, &database_name).await;
 
     let obj = data.as_object().ok_or("Invalid data format")?;
+    let locator = record_locator
+        .as_object()
+        .ok_or("Invalid record locator format")?;
+    if locator.is_empty() {
+        return Err("Record locator is empty".to_string());
+    }
     let set_clauses: Vec<String> = obj
         .keys()
-        .filter(|k| *k != primary_key)
-        .map(|k| format!("`{}` = ?", k))
+        .filter(|k| !locator.contains_key(*k))
+        .map(|k| format!("`{}` = ?", escape_mysql_ident(k)))
         .collect();
 
     if set_clauses.is_empty() {
         return Ok(0);
     }
 
+    let where_clauses: Vec<String> = locator
+        .keys()
+        .map(|k| format!("`{}` <=> ?", escape_mysql_ident(k)))
+        .collect();
+
     let query = format!(
-        "UPDATE `{}`.`{}` SET {} WHERE `{}` <=> ?",
+        "UPDATE `{}`.`{}` SET {} WHERE {}",
         database_name,
         table_name,
         set_clauses.join(", "),
-        primary_key
+        where_clauses.join(" AND ")
     );
 
     let mut q = sqlx::query(&query);
 
-    for col in obj.keys().filter(|k| *k != primary_key) {
+    for col in obj.keys().filter(|k| !locator.contains_key(*k)) {
         let val = obj.get(col).unwrap();
         q = bind_value(q, val);
     }
 
-    q = bind_value(q, &primary_value);
+    for key in locator.keys() {
+        let val = locator.get(key).unwrap();
+        q = bind_value(q, val);
+    }
 
     let result = q
         .execute(&pool)
@@ -877,9 +967,10 @@ pub async fn update_record(
 pub async fn delete_record(
     connection_id: &str,
     table_name: &str,
-    primary_key: &str,
-    primary_value: serde_json::Value,
+    record_locator: serde_json::Value,
 ) -> Result<u64, String> {
+    ensure_connection_writable(connection_id).await?;
+
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
         connections
@@ -897,13 +988,30 @@ pub async fn delete_record(
 
     set_default_database(connection_id, &database_name).await;
 
+    let locator = record_locator
+        .as_object()
+        .ok_or("Invalid record locator format")?;
+    if locator.is_empty() {
+        return Err("Record locator is empty".to_string());
+    }
+
+    let where_clauses: Vec<String> = locator
+        .keys()
+        .map(|k| format!("`{}` <=> ?", escape_mysql_ident(k)))
+        .collect();
+
     let query = format!(
-        "DELETE FROM `{}`.`{}` WHERE `{}` <=> ?",
-        database_name, table_name, primary_key
+        "DELETE FROM `{}`.`{}` WHERE {}",
+        database_name,
+        table_name,
+        where_clauses.join(" AND ")
     );
 
     let mut q = sqlx::query(&query);
-    q = bind_value(q, &primary_value);
+    for key in locator.keys() {
+        let val = locator.get(key).unwrap();
+        q = bind_value(q, val);
+    }
 
     let result = q
         .execute(&pool)
@@ -1187,6 +1295,9 @@ pub async fn execute_query(
     }
 
     let trimmed = query.trim_start();
+    if is_connection_read_only(connection_id).await? && !query_allowed_in_read_only_mode(trimmed) {
+        return Err("当前连接为只读模式，只允许执行查询类 SQL".to_string());
+    }
     let map_err = |e: sqlx::Error| {
         let msg = e.to_string();
         if msg.contains("1046") || msg.contains("3D000") {
@@ -1346,6 +1457,8 @@ pub async fn create_table(
     table_name: &str,
     columns: &[CreateTableColumn],
 ) -> Result<(), String> {
+    ensure_connection_writable(connection_id).await?;
+
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
         connections
@@ -1425,6 +1538,8 @@ pub async fn drop_table(
     database: &str,
     table_name: &str,
 ) -> Result<(), String> {
+    ensure_connection_writable(connection_id).await?;
+
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
         connections
@@ -1456,6 +1571,8 @@ pub async fn add_column(
     table_name: &str,
     column: &AddColumnOptions,
 ) -> Result<(), String> {
+    ensure_connection_writable(connection_id).await?;
+
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
         connections

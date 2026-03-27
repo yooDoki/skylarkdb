@@ -1,7 +1,29 @@
-use crate::database::{REDIS_CONNECTIONS, REDIS_SELECTED_DATABASE};
+use crate::{
+    database::{CONNECTION_CONFIGS, REDIS_CONNECTIONS, REDIS_SELECTED_DATABASE},
+    secrets,
+};
 use crate::models::*;
 use redis::AsyncCommands;
 use redis::Client;
+
+fn sanitize_connection_config(connection: &DatabaseConnection) -> DatabaseConnection {
+    let mut sanitized = connection.clone();
+    sanitized.password = None;
+    sanitized
+}
+
+async fn ensure_connection_writable(connection_id: &str) -> Result<(), String> {
+    let configs = CONNECTION_CONFIGS.lock().await;
+    let connection = configs
+        .get(connection_id)
+        .ok_or("Connection not found")?;
+
+    if connection.read_only {
+        return Err("当前连接为只读模式，已禁止写入或删除操作".to_string());
+    }
+
+    Ok(())
+}
 
 async fn get_connection_for_db(
     connection_id: &str,
@@ -30,8 +52,19 @@ async fn get_connection_for_db(
 }
 
 pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult, String> {
-    let redis_url = if let Some(password) = connection
+    let password = if let Some(password) = connection
         .password
+        .as_ref()
+        .filter(|s| !s.trim().is_empty())
+    {
+        Some(password.clone())
+    } else if connection.has_password {
+        Some(secrets::require_connection_password(&connection.id)?)
+    } else {
+        None
+    };
+
+    let redis_url = if let Some(password) = password
         .as_ref()
         .filter(|s| !s.trim().is_empty())
     {
@@ -52,6 +85,9 @@ pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult
                     // 初始化选中的数据库为 0
                     let mut selected_db = REDIS_SELECTED_DATABASE.lock().await;
                     selected_db.insert(connection.id.clone(), 0);
+                    drop(selected_db);
+                    let mut configs = CONNECTION_CONFIGS.lock().await;
+                    configs.insert(connection.id.clone(), sanitize_connection_config(connection));
                     Ok(ConnectionResult {
                         success: true,
                         message: "Connected successfully".to_string(),
@@ -68,8 +104,22 @@ pub async fn test_connection(
     host: &str,
     port: u16,
     password: &Option<String>,
+    connection_id: Option<&str>,
+    use_stored_secret: bool,
 ) -> Result<ConnectionResult, String> {
-    let redis_url = if let Some(pwd) = password.as_ref().filter(|s| !s.trim().is_empty()) {
+    let effective_password = if let Some(password) = password.as_ref().filter(|s| !s.trim().is_empty()) {
+        Some(password.clone())
+    } else if use_stored_secret {
+        if let Some(connection_id) = connection_id {
+            Some(secrets::require_connection_password(connection_id)?)
+        } else {
+            return Err("缺少连接 ID，无法读取系统钥匙串中的密码".to_string());
+        }
+    } else {
+        None
+    };
+
+    let redis_url = if let Some(pwd) = effective_password.as_ref().filter(|s| !s.trim().is_empty()) {
         format!("redis://:{}@{}:{}", pwd, host, port)
     } else {
         format!("redis://{}:{}", host, port)
@@ -90,6 +140,12 @@ pub async fn test_connection(
 pub async fn disconnect(connection_id: &str) -> Result<(), String> {
     let mut connections = REDIS_CONNECTIONS.lock().await;
     connections.remove(connection_id);
+    drop(connections);
+    let mut selected_db = REDIS_SELECTED_DATABASE.lock().await;
+    selected_db.remove(connection_id);
+    drop(selected_db);
+    let mut configs = CONNECTION_CONFIGS.lock().await;
+    configs.remove(connection_id);
     Ok(())
 }
 
@@ -215,6 +271,8 @@ pub async fn get_value(connection_id: &str, key: &str) -> Result<String, String>
 }
 
 pub async fn delete_key(connection_id: &str, key: &str) -> Result<bool, String> {
+    ensure_connection_writable(connection_id).await?;
+
     let (mut con, _db_index) = get_connection_for_db(connection_id).await?;
 
     let result: i32 = con

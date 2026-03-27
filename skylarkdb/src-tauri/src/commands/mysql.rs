@@ -15,8 +15,20 @@ pub async fn test_mysql_connection(
     password: Option<String>,
     database: Option<String>,
     ssl: bool,
+    connection_id: Option<String>,
+    use_stored_secret: Option<bool>,
 ) -> Result<ConnectionResult, String> {
-    mysql::test_connection(&host, port, &username, &password, &database, ssl).await
+    mysql::test_connection(
+        &host,
+        port,
+        &username,
+        &password,
+        &database,
+        ssl,
+        connection_id.as_deref(),
+        use_stored_secret.unwrap_or(false),
+    )
+    .await
 }
 
 #[command]
@@ -102,27 +114,18 @@ pub async fn update_mysql_record(
     connection_id: String,
     table_name: String,
     data: serde_json::Value,
-    primary_key: String,
-    primary_value: serde_json::Value,
+    record_locator: serde_json::Value,
 ) -> Result<u64, String> {
-    mysql::update_record(
-        &connection_id,
-        &table_name,
-        data,
-        &primary_key,
-        primary_value,
-    )
-    .await
+    mysql::update_record(&connection_id, &table_name, data, record_locator).await
 }
 
 #[command]
 pub async fn delete_mysql_record(
     connection_id: String,
     table_name: String,
-    primary_key: String,
-    primary_value: serde_json::Value,
+    record_locator: serde_json::Value,
 ) -> Result<u64, String> {
-    mysql::delete_record(&connection_id, &table_name, &primary_key, primary_value).await
+    mysql::delete_record(&connection_id, &table_name, record_locator).await
 }
 
 #[command]

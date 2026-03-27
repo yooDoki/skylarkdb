@@ -1,3 +1,5 @@
+export type PasswordStorageStrategy = 'local' | 'system';
+
 export interface DatabaseConnection {
   id: string;
   name: string;
@@ -6,8 +8,11 @@ export interface DatabaseConnection {
   port: number;
   username?: string;
   password?: string;
+  hasPassword?: boolean;
+  passwordStorage?: PasswordStorageStrategy;
   database?: string;
   ssl?: boolean;
+  readOnly?: boolean;
   createdAt: number;
   updatedAt: number;
 }

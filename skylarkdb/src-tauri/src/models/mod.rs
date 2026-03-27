@@ -10,8 +10,12 @@ pub struct DatabaseConnection {
     pub port: u16,
     pub username: Option<String>,
     pub password: Option<String>,
+    #[serde(rename = "hasPassword", default)]
+    pub has_password: bool,
     pub database: Option<String>,
     pub ssl: bool,
+    #[serde(rename = "readOnly", default)]
+    pub read_only: bool,
     #[serde(rename = "createdAt")]
     pub created_at: i64,
     #[serde(rename = "updatedAt")]

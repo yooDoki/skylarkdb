@@ -14,11 +14,16 @@ interface DeleteTableDialogProps {
 
 export function DeleteTableDialog({ open, onOpenChange, tableName, onSuccess }: DeleteTableDialogProps) {
   const { activeConnection, selectedDatabase } = useConnectionStore();
+  const isReadOnly = !!activeConnection.connection?.readOnly;
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleDelete = async () => {
     if (!activeConnection.connection?.id || !selectedDatabase) return;
+    if (isReadOnly) {
+      setError('当前连接为只读模式，不能删除数据表');
+      return;
+    }
 
     setIsDeleting(true);
     setError(null);
@@ -73,7 +78,7 @@ export function DeleteTableDialog({ open, onOpenChange, tableName, onSuccess }: 
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>取消</Button>
-          <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+          <Button variant="destructive" onClick={handleDelete} disabled={isDeleting || isReadOnly}>
             {isDeleting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             删除
           </Button>
