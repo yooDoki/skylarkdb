@@ -54,9 +54,12 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
   const [savingRowKey, setSavingRowKey] = useState<string | null>(null);
   const [editMessage, setEditMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [editingFocusColumn, setEditingFocusColumn] = useState<string | null>(null);
 
   const tableCache = useRef<Map<string, TableCache>>(new Map());
   const abortControllerRef = useRef<AbortController | null>(null);
+  const editingRowData = useRef<TableRow | null>(null);
+  const saveEditingRowRef = useRef<(row: TableRow) => Promise<void>>();
 
   const CACHE_TIMEOUT = 5 * 60 * 1000;
 
@@ -221,6 +224,8 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     setEditingValues({});
     setSavingRowKey(null);
     setEditMessage(null);
+    setEditingFocusColumn(null);
+    editingRowData.current = null;
   }, [viewingTable, currentPage]);
 
   const currentTableColumns = useMemo(() => (
@@ -311,7 +316,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     return rawValue;
   }, []);
 
-  const startEditingRow = useCallback((row: TableRow) => {
+  const startEditingRow = useCallback((row: TableRow, focusColumn?: string) => {
     if (!editablePrimaryKey) return;
 
     const rowKey = makeRowKey(row[editablePrimaryKey.name]);
@@ -322,8 +327,10 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
       nextValues[column.name] = serializeEditorValue(row[column.name]);
     });
 
+    editingRowData.current = row;
     setEditingRowKey(rowKey);
     setEditingValues(nextValues);
+    setEditingFocusColumn(focusColumn && editableColumns.some(c => c.name === focusColumn) ? focusColumn : null);
     setEditMessage(null);
   }, [editableColumns, editablePrimaryKey, makeRowKey, serializeEditorValue]);
 
@@ -332,6 +339,8 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     setEditingValues({});
     setSavingRowKey(null);
     setEditMessage(null);
+    setEditingFocusColumn(null);
+    editingRowData.current = null;
   }, []);
 
   const handleEditValueChange = useCallback((columnName: string, value: string) => {
@@ -386,6 +395,8 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
       tableCache.current.clear();
       setEditingRowKey(null);
       setEditingValues({});
+      setEditingFocusColumn(null);
+      editingRowData.current = null;
       setEditMessage({
         type: 'success',
         text: `已保存主键 ${editablePrimaryKey.name} = ${serializeEditorValue(primaryValue)} 的修改`,
@@ -415,6 +426,47 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     serializeEditorValue,
     viewingTable,
   ]);
+
+  // Keep ref in sync for keyboard shortcut access
+  saveEditingRowRef.current = saveEditingRow;
+
+  // Keyboard shortcuts: ESC cancel, Ctrl/Cmd+Enter save
+  useEffect(() => {
+    if (!editingRowKey) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        cancelEditingRow();
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (editingRowData.current) {
+          void saveEditingRowRef.current!(editingRowData.current);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [editingRowKey, cancelEditingRow]);
+
+  // Auto-focus the editing column input
+  useEffect(() => {
+    if (editingFocusColumn && editingRowKey) {
+      requestAnimationFrame(() => {
+        const input = document.querySelector<HTMLInputElement>(
+          `input[data-edit-col="${editingFocusColumn}"]`
+        );
+        input?.focus();
+        input?.select();
+      });
+    }
+  }, [editingFocusColumn, editingRowKey]);
 
   const handleTableClick = useCallback((tableName: string) => {
     if (clickTimer) {
@@ -897,7 +949,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                 : '未检测到主键'}
                             </Badge>
                             {canInlineEdit ? (
-                              <span>点击每行右侧“编辑”后可直接修改，输入 `NULL` 可置空。</span>
+                              <span>双击单元格或点击"编辑"修改，<kbd className="rounded border px-1 font-mono text-[10px]">Tab</kbd> 切换单元格，<kbd className="rounded border px-1 font-mono text-[10px]">Ctrl+Enter</kbd> 保存，<kbd className="rounded border px-1 font-mono text-[10px]">Esc</kbd> 取消，输入 <code className="font-mono text-[10px]">NULL</code> 可置空。</span>
                             ) : editablePrimaryKey ? (
                               <span>当前表没有可安全编辑的普通列。</span>
                             ) : primaryKeyColumns.length > 1 ? (
@@ -937,13 +989,45 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                   const isEditingRow = !!rowKey && editingRowKey === rowKey;
                                   const columnMeta = currentTableColumns.find((column) => column.name === col);
                                   const canEditCell = isEditingRow && columnMeta && !columnMeta.isPrimaryKey && !columnMeta.isBlob && !columnMeta.isBit && !columnMeta.isGeometry;
+                                  const isDoubleClickEditable = !isEditingRow && canInlineEdit && rowKey && columnMeta && !columnMeta.isPrimaryKey && !columnMeta.isBlob && !columnMeta.isBit && !columnMeta.isGeometry;
+
+                                  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+                                    if (e.key === 'Tab') {
+                                      e.preventDefault();
+                                      const cols = editableColumns.map(c => c.name);
+                                      const currentIdx = cols.indexOf(col);
+                                      if (e.shiftKey) {
+                                        if (currentIdx > 0) setEditingFocusColumn(cols[currentIdx - 1]);
+                                      } else {
+                                        if (currentIdx < cols.length - 1) {
+                                          setEditingFocusColumn(cols[currentIdx + 1]);
+                                        } else if (editingRowData.current) {
+                                          void saveEditingRowRef.current!(editingRowData.current);
+                                        }
+                                      }
+                                    }
+                                  };
 
                                   return (
-                                    <TableCell key={cellIdx} className="min-w-[160px] whitespace-nowrap border-border/40 py-3 text-xs align-top">
+                                    <TableCell
+                                      key={cellIdx}
+                                      className={cn(
+                                        "min-w-[160px] whitespace-nowrap border-border/40 py-3 text-xs align-top",
+                                        isDoubleClickEditable && "cursor-pointer hover:bg-primary/[0.08] transition-colors"
+                                      )}
+                                      onDoubleClick={() => {
+                                        if (isDoubleClickEditable) {
+                                          startEditingRow(row, col);
+                                        }
+                                      }}
+                                    >
                                       {canEditCell ? (
                                         <Input
+                                          data-edit-col={col}
+                                          autoFocus={editingFocusColumn === col}
                                           value={editingValues[col] ?? ''}
                                           onChange={(event) => handleEditValueChange(col, event.target.value)}
+                                          onKeyDown={handleInputKeyDown}
                                           className="h-8 min-w-[180px] rounded-md border-border/60 bg-background px-2 font-mono text-xs"
                                         />
                                       ) : (
