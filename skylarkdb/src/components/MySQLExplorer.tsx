@@ -448,6 +448,19 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
         if (editingRowData.current) {
           void saveEditingRowRef.current!(editingRowData.current);
         }
+        return;
+      }
+
+      // Enter - save (only when not in an Input/textarea; Input handles its own Enter)
+      if (e.key === 'Enter' && !(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (editingRowData.current) {
+            void saveEditingRowRef.current!(editingRowData.current);
+          }
+        }
       }
     };
 
@@ -455,14 +468,14 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [editingRowKey, cancelEditingRow]);
 
-  // Auto-focus the editing column input
+  // Auto-focus the editing column input (without scrolling)
   useEffect(() => {
     if (editingFocusColumn && editingRowKey) {
       requestAnimationFrame(() => {
         const input = document.querySelector<HTMLInputElement>(
           `input[data-edit-col="${editingFocusColumn}"]`
         );
-        input?.focus();
+        input?.focus({ preventScroll: true });
         input?.select();
       });
     }
@@ -949,7 +962,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                 : '未检测到主键'}
                             </Badge>
                             {canInlineEdit ? (
-                              <span>双击单元格或点击"编辑"修改，<kbd className="rounded border px-1 font-mono text-[10px]">Tab</kbd> 切换单元格，<kbd className="rounded border px-1 font-mono text-[10px]">Ctrl+Enter</kbd> 保存，<kbd className="rounded border px-1 font-mono text-[10px]">Esc</kbd> 取消，输入 <code className="font-mono text-[10px]">NULL</code> 可置空。</span>
+                              <span>双击单元格或点击"编辑"修改，<kbd className="rounded border px-1 font-mono text-[10px]">Tab</kbd> 切换单元格，<kbd className="rounded border px-1 font-mono text-[10px]">Enter</kbd> 保存，<kbd className="rounded border px-1 font-mono text-[10px]">Esc</kbd> 取消，输入 <code className="font-mono text-[10px]">NULL</code> 可置空。</span>
                             ) : editablePrimaryKey ? (
                               <span>当前表没有可安全编辑的普通列。</span>
                             ) : primaryKeyColumns.length > 1 ? (
@@ -1006,6 +1019,13 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                         }
                                       }
                                     }
+                                    if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      if (editingRowData.current) {
+                                        void saveEditingRowRef.current!(editingRowData.current);
+                                      }
+                                    }
                                   };
 
                                   return (
@@ -1024,7 +1044,6 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                       {canEditCell ? (
                                         <Input
                                           data-edit-col={col}
-                                          autoFocus={editingFocusColumn === col}
                                           value={editingValues[col] ?? ''}
                                           onChange={(event) => handleEditValueChange(col, event.target.value)}
                                           onKeyDown={handleInputKeyDown}
