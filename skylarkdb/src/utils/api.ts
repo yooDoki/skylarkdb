@@ -6,7 +6,9 @@ import {
   TableData,
   RedisKey,
   RedisInfo,
+  MySQLColumn,
   MySQLRoutine,
+  CreateTableColumn,
 } from '@/types';
 
 export async function testMySQLConnection(params: {
@@ -55,6 +57,10 @@ export async function disconnectRedis(connectionId: string): Promise<void> {
   return invoke<void>('disconnect_redis', { connectionId });
 }
 
+export async function getMySQLDatabases(connectionId: string): Promise<string[]> {
+  return invoke<string[]>('get_mysql_databases', { connectionId });
+}
+
 export async function getMySQLTableData(
   connectionId: string,
   tableName: string,
@@ -81,12 +87,12 @@ export async function getMySQLTableData(
   });
 }
 
-export async function getMySQLTables(connectionId: string): Promise<any[]> {
-  return invoke<any[]>('get_mysql_tables', { connectionId });
+export async function getMySQLTables(connectionId: string, database?: string): Promise<any[]> {
+  return invoke<any[]>('get_mysql_tables', { connectionId, database: database ?? null });
 }
 
-export async function getMySQLColumns(connectionId: string, tableName: string): Promise<any[]> {
-  return invoke<any[]>('get_mysql_columns', { connectionId, tableName });
+export async function getMySQLColumns(connectionId: string, tableName: string): Promise<MySQLColumn[]> {
+  return invoke<MySQLColumn[]>('get_mysql_columns', { connectionId, tableName });
 }
 
 export async function executeMySQLQuery(
@@ -130,6 +136,30 @@ export async function deleteMySQLRecord(
   primaryValue: any
 ): Promise<number> {
   return invoke<number>('delete_mysql_record', { connectionId, tableName, primaryKey, primaryValue });
+}
+
+export async function createMySQLTable(
+  connectionId: string,
+  database: string,
+  tableName: string,
+  columns: CreateTableColumn[]
+): Promise<void> {
+  return invoke<void>('create_mysql_table', { connectionId, database, tableName, columns });
+}
+
+export async function dropMySQLTable(
+  connectionId: string,
+  database: string,
+  tableName: string
+): Promise<void> {
+  return invoke<void>('drop_mysql_table', { connectionId, database, tableName });
+}
+
+export async function setMySQLDefaultDatabase(
+  connectionId: string,
+  database: string
+): Promise<void> {
+  return invoke<void>('set_mysql_default_database', { connectionId, database });
 }
 
 // Redis API functions

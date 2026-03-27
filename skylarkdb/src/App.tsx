@@ -1,75 +1,120 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ConnectionList } from '@/components/ConnectionList';
 import { MySQLExplorer } from '@/components/MySQLExplorer';
 import { RedisExplorer } from '@/components/RedisExplorer';
+import { SqlQueryPanel } from '@/components/SqlQueryPanel';
 import { SettingsDialog } from '@/components/SettingsDialog';
+import { UpdateChecker } from '@/components/UpdateChecker';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { useSidebarStore } from '@/stores/sidebarStore';
+import { useSettings } from '@/hooks/useSettings';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
-import { Database, Server, Moon, Sun, Sparkles, ChevronRight, Terminal } from 'lucide-react';
+import { Database, Server, Sparkles, ChevronRight, FileCode, Table2, CheckCircle2, XCircle, Loader2, Settings } from 'lucide-react';
+import { connectMySQL, connectRedis } from '@/utils/api';
+
+type ViewMode = 'explorer' | 'query';
 
 function App() {
-  const { activeConnection } = useConnectionStore();
+  const { activeConnection, setConnectionStatus } = useConnectionStore();
   const { collapsed, toggle } = useSidebarStore();
-  const [darkMode, setDarkMode] = useState(false);
+  const { settings, isLoaded } = useSettings();
   const [mounted, setMounted] = useState(false);
-  const [sqlWorkbenchOpen, setSqlWorkbenchOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('explorer');
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    setSqlWorkbenchOpen(false);
-  }, [activeConnection.connection?.id, activeConnection.connection?.type]);
+  const reconnectActiveConnection = useCallback(async () => {
+    const connection = activeConnection.connection;
+    if (!connection) return;
 
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-    document.documentElement.classList.toggle('dark');
+    setConnectionStatus('connecting');
+
+    try {
+      const connectPromise = connection.type === 'mysql'
+        ? connectMySQL(connection)
+        : connectRedis(connection);
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        window.setTimeout(() => {
+          reject(new Error(`连接超时（>${settings.connectionTimeout} 秒）`));
+        }, settings.connectionTimeout * 1000);
+      });
+
+      const result = await Promise.race([connectPromise, timeoutPromise]);
+
+      if (result.success) {
+        setConnectionStatus('connected');
+      } else {
+        setConnectionStatus('error', result.message);
+      }
+    } catch (error) {
+      setConnectionStatus('error', error instanceof Error ? error.message : 'Connection failed');
+    }
+  }, [activeConnection.connection, setConnectionStatus, settings.connectionTimeout]);
+
+  useEffect(() => {
+    if (!isLoaded || !settings.autoReconnect || !activeConnection.connection || activeConnection.status !== 'disconnected') {
+      return;
+    }
+
+    let cancelled = false;
+
+    const reconnect = async () => {
+      await reconnectActiveConnection();
+      if (cancelled) {
+        return;
+      }
+    };
+
+    void reconnect();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConnection.connection, activeConnection.status, isLoaded, reconnectActiveConnection, settings.autoReconnect]);
+
+  // Theme is handled by useSettings hook
+
+  // Get connection status display
+  const getConnectionStatus = () => {
+    if (!activeConnection.connection) {
+      return { icon: null, text: '未连接', color: 'text-muted-foreground' };
+    }
+    switch (activeConnection.status) {
+      case 'connected':
+        return {
+          icon: <CheckCircle2 className="h-3 w-3" />,
+          text: `${activeConnection.connection.name} (${activeConnection.connection.type.toUpperCase()})`,
+          color: 'text-green-500'
+        };
+      case 'connecting':
+        return {
+          icon: <Loader2 className="h-3 w-3 animate-spin" />,
+          text: '连接中...',
+          color: 'text-amber-500'
+        };
+      case 'error':
+        return {
+          icon: <XCircle className="h-3 w-3" />,
+          text: '连接失败',
+          color: 'text-destructive'
+        };
+      default:
+        return { icon: null, text: '未连接', color: 'text-muted-foreground' };
+    }
   };
+
+  const connectionStatus = getConnectionStatus();
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
-      <header className="h-14 border-b flex items-center justify-between px-4 bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
-            <Database className="h-6 w-6 text-primary relative" />
-          </div>
-          <div className="flex flex-col">
-            <h1 className="text-lg font-bold leading-tight">
-              <span className="gradient-text">Skylark</span>
-              <span className="text-foreground">DB</span>
-            </h1>
-            <span className="text-[10px] text-muted-foreground -mt-0.5">数据库管理工具</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-          {activeConnection.connection?.type === 'mysql' && activeConnection.status === 'connected' && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSqlWorkbenchOpen(true)}
-              className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
-              title="SQL 查询"
-            >
-              <Terminal className="h-4 w-4" />
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleDarkMode}
-            className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
-            title="切换主题"
-          >
-            {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-          <SettingsDialog />
-        </div>
-      </header>
+      {/* Hidden component to auto-check updates on startup */}
+      <div className="hidden">
+        <UpdateChecker autoCheck={true} />
+      </div>
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -100,19 +145,61 @@ function App() {
           </div>
         </button>
 
+        {collapsed && (
+          <div className="absolute right-4 top-3 z-20">
+            <SettingsDialog
+              trigger={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 rounded-full border border-border/60 bg-background/90 shadow-sm backdrop-blur hover:bg-muted"
+                  title="设置 (⌘,)"
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              }
+            />
+          </div>
+        )}
+
         {/* Right Content - Database Explorer */}
-        <div className="flex-1 overflow-hidden bg-background min-h-0">
+        <div className="flex-1 overflow-hidden bg-background min-h-0 flex flex-col">
           {activeConnection.connection ? (
-            <div className={`h-full min-h-0 animate-fade-in ${mounted ? 'opacity-100' : 'opacity-0'}`}>
-              {activeConnection.connection.type === 'mysql' ? (
-                <MySQLExplorer
-                  sqlWorkbenchOpen={sqlWorkbenchOpen}
-                  onSqlWorkbenchOpenChange={setSqlWorkbenchOpen}
-                />
-              ) : (
-                <RedisExplorer />
+            <>
+              {activeConnection.connection.type === 'mysql' && (
+                <div className="flex items-center gap-1 px-4 py-2 border-b bg-muted/30">
+                  <Button
+                    variant={viewMode === 'explorer' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('explorer')}
+                    className="h-7 text-xs"
+                  >
+                    <Table2 className="h-3.5 w-3.5 mr-1.5" />
+                    数据浏览
+                  </Button>
+                  <Button
+                    variant={viewMode === 'query' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('query')}
+                    className="h-7 text-xs"
+                  >
+                    <FileCode className="h-3.5 w-3.5 mr-1.5" />
+                    SQL 查询
+                  </Button>
+                </div>
               )}
-            </div>
+              <div className={`flex-1 min-h-0 h-full overflow-hidden animate-fade-in ${mounted ? 'opacity-100' : 'opacity-0'}`}>
+                {activeConnection.connection.type === 'mysql' ? (
+                  viewMode === 'query' ? (
+                    <SqlQueryPanel />
+                  ) : (
+                    <MySQLExplorer onReconnect={reconnectActiveConnection} />
+                  )
+                ) : (
+                  <RedisExplorer />
+                )}
+              </div>
+            </>
           ) : (
             <div className="flex items-center justify-center h-full min-h-0">
               <div className="text-center animate-scale-in">
@@ -140,6 +227,27 @@ function App() {
           )}
         </div>
       </div>
+
+      {/* Status Bar */}
+      {settings.showStatusBar && isLoaded && (
+        <div className="h-7 border-t bg-muted/30 flex items-center justify-between px-3 text-xs">
+          <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-1.5 ${connectionStatus.color}`}>
+              {connectionStatus.icon}
+              <span>{connectionStatus.text}</span>
+            </div>
+            {activeConnection.connection?.database && (
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Database className="h-3 w-3" />
+                <span>{activeConnection.connection.database}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-4 text-muted-foreground">
+            <span>SkylarkDB v0.1.3</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

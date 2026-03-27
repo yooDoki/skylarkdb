@@ -51,8 +51,16 @@ pub async fn disconnect_mysql(connection_id: String) -> Result<(), String> {
 }
 
 #[command]
-pub async fn get_mysql_tables(connection_id: String) -> Result<Vec<MySQLTable>, String> {
-    mysql::get_tables(&connection_id).await
+pub async fn get_mysql_databases(connection_id: String) -> Result<Vec<String>, String> {
+    mysql::get_databases(&connection_id).await
+}
+
+#[command]
+pub async fn get_mysql_tables(
+    connection_id: String,
+    database: Option<String>,
+) -> Result<Vec<MySQLTable>, String> {
+    mysql::get_tables(&connection_id, database.as_deref()).await
 }
 
 #[command]
@@ -115,6 +123,34 @@ pub async fn delete_mysql_record(
     primary_value: serde_json::Value,
 ) -> Result<u64, String> {
     mysql::delete_record(&connection_id, &table_name, &primary_key, primary_value).await
+}
+
+#[command]
+pub async fn create_mysql_table(
+    connection_id: String,
+    database: String,
+    table_name: String,
+    columns: Vec<CreateTableColumn>,
+) -> Result<(), String> {
+    mysql::create_table(&connection_id, &database, &table_name, &columns).await
+}
+
+#[command]
+pub async fn drop_mysql_table(
+    connection_id: String,
+    database: String,
+    table_name: String,
+) -> Result<(), String> {
+    mysql::drop_table(&connection_id, &database, &table_name).await
+}
+
+#[command]
+pub async fn set_mysql_default_database(
+    connection_id: String,
+    database: String,
+) -> Result<(), String> {
+    mysql::set_default_database(&connection_id, &database).await;
+    Ok(())
 }
 
 // Import/Export commands

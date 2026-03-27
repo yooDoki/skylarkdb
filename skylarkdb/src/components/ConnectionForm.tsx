@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { DatabaseConnection } from '@/types';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Database, Server, Lock, Key, X, Shield, Check, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Database, Server, Shield, Loader2, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { testMySQLConnection, testRedisConnection } from '@/utils/api';
 
@@ -15,11 +16,18 @@ interface ConnectionFormProps {
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
+interface FormErrors {
+  name?: string;
+  host?: string;
+  port?: string;
+}
+
 export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
   const { addConnection, updateConnection } = useConnectionStore();
-  const [isVisible, setIsVisible] = useState(false);
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testMessage, setTestMessage] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [formData, setFormData] = useState({
     name: initialData?.name || '',
     type: initialData?.type || 'mysql' as const,
@@ -31,13 +39,33 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
     ssl: initialData?.ssl || false,
   });
 
-  useEffect(() => {
-    setIsVisible(true);
-  }, []);
+  const validateForm = (): boolean => {
+    const errors: FormErrors = {};
+    
+    if (!formData.name.trim()) {
+      errors.name = '请输入连接名称';
+    }
+    
+    if (!formData.host.trim()) {
+      errors.host = '请输入主机地址';
+    }
+    
+    if (formData.port < 1 || formData.port > 65535) {
+      errors.port = '端口号必须在 1-65535 之间';
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleTestConnection = async () => {
+    if (!validateForm()) {
+      return;
+    }
+    
     setTestStatus('testing');
     setTestMessage('');
+    setFormErrors({});
 
     try {
       if (formData.type === 'mysql') {
@@ -69,6 +97,10 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!validateForm()) {
+      return;
+    }
+
     const connectionData = {
       ...formData,
       username: formData.username.trim() === '' ? undefined : formData.username,
@@ -92,232 +124,194 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
     }));
   };
 
-  const handleClose = () => {
-    setIsVisible(false);
-    setTimeout(onClose, 150);
-  };
-
-  const getTypeButton = (type: 'mysql' | 'redis') => {
-    const isSelected = formData.type === type;
-    const isMysql = type === 'mysql';
-    
-    return (
-      <button
-        type="button"
-        onClick={() => handleTypeChange(type)}
-        className={cn(
-          "flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 transition-all duration-200",
-          isSelected
-            ? isMysql
-              ? "border-mysql bg-mysql/10 text-mysql"
-              : "border-redis bg-redis/10 text-redis"
-            : "border-border bg-card hover:border-muted-foreground/30"
-        )}
-      >
-        {isMysql ? (
-          <Database className={cn("h-5 w-5", isSelected && "text-mysql")} />
-        ) : (
-          <Server className={cn("h-5 w-5", isSelected && "text-redis")} />
-        )}
-        <span className="font-semibold">{type.toUpperCase()}</span>
-        {isSelected && <Check className="h-4 w-4 ml-1" />}
-      </button>
-    );
-  };
-
   return (
-    <div 
-      className={cn(
-        "fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-150",
-        isVisible ? "opacity-100" : "opacity-0"
-      )}
-      onClick={handleClose}
-    >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      
-      {/* Modal */}
-      <div 
-        className={cn(
-          "relative w-full max-w-lg max-h-[90vh] bg-card rounded-2xl shadow-2xl border transition-all duration-200 flex flex-col",
-          isVisible ? "scale-100 opacity-100" : "scale-95 opacity-0"
-        )}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              "p-2 rounded-lg",
-              formData.type === 'mysql' ? "bg-mysql/10" : "bg-redis/10"
-            )}>
-              {formData.type === 'mysql' ? (
-                <Database className="h-5 w-5 text-mysql" />
-              ) : (
-                <Server className="h-5 w-5 text-redis" />
-              )}
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">
-                {initialData ? '编辑连接' : '新建连接'}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                {formData.type === 'mysql' ? 'MySQL 数据库' : 'Redis 服务器'}
-              </p>
-            </div>
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="w-[380px] p-0 gap-0">
+        <div className="flex items-center gap-3 px-5 py-4 border-b">
+          <div className={cn(
+            "p-2 rounded-lg",
+            formData.type === 'mysql' ? "bg-mysql/15" : "bg-redis/15"
+          )}>
+            {formData.type === 'mysql' ? (
+              <Database className="h-4.5 w-4.5 text-mysql" />
+            ) : (
+              <Server className="h-4.5 w-4.5 text-redis" />
+            )}
           </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={handleClose}
-            className="h-9 w-9 rounded-full hover:bg-muted"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+          <DialogTitle className="text-base font-semibold">
+            {initialData ? '编辑连接' : '新建连接'}
+          </DialogTitle>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
-          {/* Type Selection */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">数据库类型</Label>
-            <div className="flex gap-3">
-              {getTypeButton('mysql')}
-              {getTypeButton('redis')}
-            </div>
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div className="flex gap-2.5">
+            {(['mysql', 'redis'] as const).map((type) => {
+              const isSelected = formData.type === type;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => handleTypeChange(type)}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all",
+                    isSelected
+                      ? type === 'mysql'
+                        ? "border-mysql/50 bg-mysql/10 text-mysql"
+                        : "border-redis/50 bg-redis/10 text-redis"
+                      : "border-border hover:bg-muted/50 text-muted-foreground"
+                  )}
+                >
+                  {type === 'mysql' ? (
+                    <Database className="h-4 w-4" />
+                  ) : (
+                    <Server className="h-4 w-4" />
+                  )}
+                  {type.toUpperCase()}
+                </button>
+              );
+            })}
           </div>
 
-          {/* Connection Name */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">连接名称</Label>
+            <Label className="text-sm">连接名称</Label>
             <Input
-              placeholder="例如：生产环境数据库"
+              placeholder="例如：生产环境"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              required
-              className="h-11 rounded-lg"
+              onChange={(e) => {
+                setFormData({ ...formData, name: e.target.value });
+                if (formErrors.name) setFormErrors({ ...formErrors, name: undefined });
+              }}
+              className={cn("h-9", formErrors.name && "border-destructive")}
             />
+            {formErrors.name && (
+              <p className="text-xs text-destructive">{formErrors.name}</p>
+            )}
           </div>
 
-          {/* Host & Port */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2 space-y-2">
-              <Label className="text-sm font-medium">主机地址</Label>
+          <div className="flex gap-3">
+            <div className="flex-1 space-y-2">
+              <Label className="text-sm">主机</Label>
               <Input
                 placeholder="localhost"
                 value={formData.host}
-                onChange={(e) => setFormData({ ...formData, host: e.target.value })}
-                required
-                className="h-11 rounded-lg font-mono text-sm"
+                onChange={(e) => {
+                  setFormData({ ...formData, host: e.target.value });
+                  if (formErrors.host) setFormErrors({ ...formErrors, host: undefined });
+                }}
+                className={cn("h-9 font-mono", formErrors.host && "border-destructive")}
               />
+              {formErrors.host && (
+                <p className="text-xs text-destructive">{formErrors.host}</p>
+              )}
             </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">端口</Label>
+            <div className="w-24 space-y-2">
+              <Label className="text-sm">端口</Label>
               <Input
                 type="number"
                 value={formData.port}
-                onChange={(e) => setFormData({ ...formData, port: parseInt(e.target.value) })}
-                required
-                className="h-11 rounded-lg font-mono text-sm"
+                onChange={(e) => {
+                  setFormData({ ...formData, port: parseInt(e.target.value) || 0 });
+                  if (formErrors.port) setFormErrors({ ...formErrors, port: undefined });
+                }}
+                className={cn("h-9 font-mono", formErrors.port && "border-destructive")}
               />
             </div>
           </div>
 
-          {/* MySQL Specific Fields */}
           {formData.type === 'mysql' && (
             <div className="space-y-4 animate-fade-in">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">用户名</Label>
-                  <div className="relative">
-                    <Input
-                      placeholder="root"
-                      value={formData.username}
-                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                      className="h-11 rounded-lg pr-10"
-                    />
-                    <Database className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  </div>
+              <div className="flex gap-3">
+                <div className="flex-1 space-y-2">
+                  <Label className="text-sm">用户名</Label>
+                  <Input
+                    placeholder="root"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    className="h-9"
+                  />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">密码</Label>
+                <div className="flex-1 space-y-2">
+                  <Label className="text-sm">密码</Label>
                   <div className="relative">
                     <Input
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       placeholder="••••••••"
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="h-11 rounded-lg pr-10"
+                      className="h-9 pr-9"
                     />
-                    <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                 </div>
               </div>
               <div className="space-y-2">
-                <Label className="text-sm font-medium">默认数据库</Label>
+                <Label className="text-sm">数据库</Label>
                 <Input
                   placeholder="database_name"
                   value={formData.database}
                   onChange={(e) => setFormData({ ...formData, database: e.target.value })}
-                  className="h-11 rounded-lg"
+                  className="h-9"
                 />
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  建议填写要操作的库名；留空时执行 SQL 需使用 <span className="font-mono">库名.表名</span> 或先写{' '}
-                  <span className="font-mono">USE 库名</span>，否则可能报 No database selected。
-                </p>
               </div>
             </div>
           )}
 
-          {/* Redis Specific Fields */}
           {formData.type === 'redis' && (
             <div className="space-y-2 animate-fade-in">
-              <Label className="text-sm font-medium">密码（可选）</Label>
+              <Label className="text-sm">密码（可选）</Label>
               <div className="relative">
                 <Input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="h-11 rounded-lg pr-10"
+                  className="h-9 pr-9"
                 />
-                <Key className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
           )}
 
-          {/* SSL Toggle */}
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border border-border/50">
+          <div className="flex items-center gap-3 py-1">
             <button
               type="button"
               onClick={() => setFormData({ ...formData, ssl: !formData.ssl })}
               className={cn(
-                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200",
+                "relative w-9 h-5 rounded-full transition-colors",
                 formData.ssl ? "bg-primary" : "bg-muted-foreground/30"
               )}
             >
               <span
                 className={cn(
-                  "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
-                  formData.ssl ? "translate-x-6" : "translate-x-1"
+                  "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform",
+                  formData.ssl && "translate-x-4"
                 )}
               />
             </button>
-            <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-muted-foreground" />
-              <Label className="text-sm cursor-pointer" onClick={() => setFormData({ ...formData, ssl: !formData.ssl })}>
-                使用 SSL 加密连接
-              </Label>
-            </div>
+            <Label className="text-sm flex items-center gap-2 cursor-pointer">
+              <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+              SSL 加密连接
+            </Label>
           </div>
 
-          {/* Test Result */}
           {(testStatus === 'success' || testStatus === 'error') && (
             <div className={cn(
-              "flex items-center gap-2 p-3 rounded-lg text-sm animate-fade-in",
+              "flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm",
               testStatus === 'success' 
-                ? "bg-green-500/10 text-green-600 border border-green-500/20" 
-                : "bg-red-500/10 text-red-600 border border-red-500/20"
+                ? "bg-green-500/10 text-green-600" 
+                : "bg-red-500/10 text-red-600"
             )}>
               {testStatus === 'success' ? (
                 <CheckCircle2 className="h-4 w-4" />
@@ -328,13 +322,13 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-2.5 pt-1">
             <Button
               type="button"
               variant="outline"
-              className="flex-1 h-11 rounded-lg"
-              onClick={handleClose}
+              size="sm"
+              className="flex-1 h-9"
+              onClick={onClose}
               disabled={testStatus === 'testing'}
             >
               取消
@@ -342,14 +336,15 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
             <Button
               type="button"
               variant="secondary"
-              className="h-11 rounded-lg"
+              size="sm"
+              className="h-9 px-4"
               onClick={handleTestConnection}
               disabled={testStatus === 'testing' || !formData.host}
             >
               {testStatus === 'testing' ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  测试中...
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  测试中
                 </>
               ) : (
                 '测试连接'
@@ -357,18 +352,19 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
             </Button>
             <Button
               type="submit"
+              size="sm"
               className={cn(
-                "flex-1 h-11 rounded-lg transition-all duration-200",
+                "flex-1 h-9",
                 formData.type === 'mysql'
                   ? "bg-mysql hover:bg-mysql/90"
                   : "bg-redis hover:bg-redis/90"
               )}
             >
-              {initialData ? '保存修改' : '创建连接'}
+              {initialData ? '保存' : '创建'}
             </Button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

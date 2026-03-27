@@ -7,13 +7,36 @@ use sqlx::{
     Column, Executor, Row,
 };
 
-async fn set_default_database(connection_id: &str, database_name: &str) {
+pub async fn set_default_database(connection_id: &str, database_name: &str) {
     let db = database_name.trim();
     if db.is_empty() {
         return;
     }
     let mut meta = MYSQL_DEFAULT_DATABASE.lock().await;
     meta.insert(connection_id.to_string(), Some(db.to_string()));
+}
+
+pub async fn get_databases(connection_id: &str) -> Result<Vec<String>, String> {
+    let pool = {
+        let connections = MYSQL_CONNECTIONS.lock().await;
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
+    };
+
+    let rows = sqlx::query_as::<_, (String,)>(
+        "SELECT schema_name 
+         FROM information_schema.schemata 
+         WHERE schema_name NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+         ORDER BY schema_name",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("Failed to get databases: {}", e))?;
+
+    let databases: Vec<String> = rows.into_iter().map(|(name,)| name).collect();
+    Ok(databases)
 }
 
 /// 解析表所在的 schema。优先使用 `preferred_schema`（若该库下确有此表），
@@ -321,7 +344,10 @@ pub async fn disconnect(connection_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn get_tables(connection_id: &str) -> Result<Vec<MySQLTable>, String> {
+pub async fn get_tables(
+    connection_id: &str,
+    database: Option<&str>,
+) -> Result<Vec<MySQLTable>, String> {
     let pool = {
         let connections = MYSQL_CONNECTIONS.lock().await;
         connections
@@ -330,48 +356,55 @@ pub async fn get_tables(connection_id: &str) -> Result<Vec<MySQLTable>, String> 
             .ok_or("Connection not found")?
     };
 
-    let default_db = {
-        let meta = MYSQL_DEFAULT_DATABASE.lock().await;
-        meta.get(connection_id).cloned().flatten()
-    };
-
-    let rows = if let Some(db) = default_db {
-        sqlx::query_as::<_, (String, Option<String>, Option<u64>, Option<String>)>(
-            "SELECT table_name, engine, table_rows, 
+    let tables = if let Some(db) = database {
+        let rows = sqlx::query_as::<_, (String, Option<String>, Option<u64>, Option<String>)>(
+            "SELECT table_name, engine, table_rows,
              CONCAT(ROUND(data_length / 1024 / 1024, 2), ' MB') as size
-             FROM information_schema.tables 
+             FROM information_schema.tables
              WHERE table_schema = ?
              AND table_type = 'BASE TABLE'
              ORDER BY table_name",
         )
-        .bind(&db)
+        .bind(db)
         .fetch_all(&pool)
         .await
-        .map_err(|e| format!("Failed to get tables: {}", e))?
+        .map_err(|e| format!("Failed to get tables: {}", e))?;
+
+        rows.into_iter()
+            .map(|(name, engine, rows, size)| MySQLTable {
+                schema: db.to_string(),
+                name,
+                engine: engine.unwrap_or_else(|| "UNKNOWN".to_string()),
+                rows: rows.unwrap_or(0),
+                size: size.unwrap_or_else(|| "0 MB".to_string()),
+                created: String::new(),
+            })
+            .collect()
     } else {
-        sqlx::query_as::<_, (String, Option<String>, Option<u64>, Option<String>)>(
-            "SELECT table_name, engine, table_rows, 
+        let rows =
+            sqlx::query_as::<_, (String, String, Option<String>, Option<u64>, Option<String>)>(
+                "SELECT table_schema, table_name, engine, table_rows,
              CONCAT(ROUND(data_length / 1024 / 1024, 2), ' MB') as size
-             FROM information_schema.tables 
+             FROM information_schema.tables
              WHERE table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
              AND table_type = 'BASE TABLE'
-             ORDER BY table_name",
-        )
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| format!("Failed to get tables: {}", e))?
-    };
+             ORDER BY table_schema, table_name",
+            )
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| format!("Failed to get tables: {}", e))?;
 
-    let tables: Vec<MySQLTable> = rows
-        .into_iter()
-        .map(|(name, engine, rows, size)| MySQLTable {
-            name,
-            engine: engine.unwrap_or_else(|| "UNKNOWN".to_string()),
-            rows: rows.unwrap_or(0),
-            size: size.unwrap_or_else(|| "0 MB".to_string()),
-            created: String::new(),
-        })
-        .collect();
+        rows.into_iter()
+            .map(|(schema, name, engine, rows, size)| MySQLTable {
+                schema,
+                name,
+                engine: engine.unwrap_or_else(|| "UNKNOWN".to_string()),
+                rows: rows.unwrap_or(0),
+                size: size.unwrap_or_else(|| "0 MB".to_string()),
+                created: String::new(),
+            })
+            .collect()
+    };
 
     Ok(tables)
 }
@@ -397,8 +430,8 @@ pub async fn get_columns(
 
     set_default_database(connection_id, &database_name).await;
 
-    let rows = sqlx::query_as::<_, (String, String, String, Option<String>, Option<String>, String, Option<String>, Option<String>)>(
-        "SELECT column_name, data_type, is_nullable, column_default, extra, column_type, character_set_name, collation_name
+    let rows = sqlx::query_as::<_, (String, String, String, Option<String>, Option<String>, String, Option<String>, Option<String>, String)>(
+        "SELECT column_name, data_type, is_nullable, column_default, extra, column_type, character_set_name, collation_name, column_key
          FROM information_schema.columns
          WHERE table_schema = ? AND table_name = ?
          ORDER BY ordinal_position"
@@ -412,7 +445,7 @@ pub async fn get_columns(
     let columns: Vec<MySQLColumn> = rows
         .into_iter()
         .map(
-            |(name, data_type, nullable, default, extra, column_type, _charset, _collation)| {
+            |(name, data_type, nullable, default, extra, column_type, _charset, _collation, column_key)| {
                 let full_type = column_type.clone();
                 let type_lower = data_type.to_lowercase();
                 let is_unsigned = full_type.to_lowercase().contains("unsigned");
@@ -446,6 +479,7 @@ pub async fn get_columns(
                     name,
                     full_type,
                     r#type: data_type,
+                    is_primary_key: column_key == "PRI",
                     nullable: nullable == "YES",
                     default,
                     extra: extra.unwrap_or_default(),
@@ -667,7 +701,11 @@ fn extract_value(row: &sqlx::mysql::MySqlRow, index: usize) -> serde_json::Value
     } else if let Ok(v) = row.try_get::<i64, _>(index) {
         serde_json::Value::Number(v.into())
     } else if let Ok(v) = row.try_get::<u64, _>(index) {
-        serde_json::Value::Number(v.into())
+        if v <= i64::MAX as u64 {
+            serde_json::Value::Number(v.into())
+        } else {
+            serde_json::Value::String(v.to_string())
+        }
     } else if let Ok(v) = row.try_get::<i32, _>(index) {
         serde_json::Value::Number(v.into())
     } else if let Ok(v) = row.try_get::<u32, _>(index) {
@@ -813,7 +851,7 @@ pub async fn update_record(
     }
 
     let query = format!(
-        "UPDATE `{}`.`{}` SET {} WHERE `{}` = ?",
+        "UPDATE `{}`.`{}` SET {} WHERE `{}` <=> ?",
         database_name,
         table_name,
         set_clauses.join(", "),
@@ -860,7 +898,7 @@ pub async fn delete_record(
     set_default_database(connection_id, &database_name).await;
 
     let query = format!(
-        "DELETE FROM `{}`.`{}` WHERE `{}` = ?",
+        "DELETE FROM `{}`.`{}` WHERE `{}` <=> ?",
         database_name, table_name, primary_key
     );
 
@@ -1067,18 +1105,6 @@ fn validate_mysql_query(query: &str) -> Result<(), String> {
 
     let upper = query.to_uppercase();
 
-    if upper.contains("DROP DATABASE") || upper.contains("DROP SCHEMA") {
-        return Err("不允许执行 DROP DATABASE / DROP SCHEMA，这是危险操作".to_string());
-    }
-
-    if upper.contains("RENAME DATABASE") || upper.contains("RENAME SCHEMA") {
-        return Err("不允许执行 RENAME DATABASE / RENAME SCHEMA，MySQL 不支持此操作".to_string());
-    }
-
-    if upper.contains("ALTER DATABASE") {
-        return Err("不允许执行 ALTER DATABASE，这是危险操作".to_string());
-    }
-
     let stmt_count = upper.split(';').filter(|s| !s.trim().is_empty()).count();
     if stmt_count > 1 {
         return Err("不支持多语句执行，请只输入一条 SQL 语句".to_string());
@@ -1094,10 +1120,6 @@ fn validate_mysql_query(query: &str) -> Result<(), String> {
 
     if upper.contains("SHUTDOWN") {
         return Err("不允许执行 SHUTDOWN 命令".to_string());
-    }
-
-    if upper.contains("GRANT") || upper.contains("REVOKE") {
-        return Err("不允许执行 GRANT / REVOKE 权限命令".to_string());
     }
 
     Ok(())
@@ -1139,10 +1161,14 @@ pub async fn execute_query(
     }
 
     let start = std::time::Instant::now();
+    let mut conn = pool
+        .acquire()
+        .await
+        .map_err(|e| format!("Failed to acquire connection: {}", e))?;
 
     if let Some(ref db) = default_db {
         let use_sql = format!("USE `{}`", escape_mysql_ident(db));
-        pool.execute(use_sql.as_str()).await.map_err(|e| {
+        conn.execute(use_sql.as_str()).await.map_err(|e| {
             let msg = e.to_string();
             if msg.contains("1046") || msg.contains("3D000") {
                 format!(
@@ -1154,7 +1180,6 @@ pub async fn execute_query(
             }
         })?;
     }
-    // 注意：如果没有默认数据库，用户仍可使用 `库名.表名` 格式执行跨库查询
 
     let mut q = sqlx::query(query);
     for p in param_slice {
@@ -1175,7 +1200,7 @@ pub async fn execute_query(
     };
 
     if mysql_query_returns_rows(trimmed) {
-        let result = q.fetch_all(&pool).await.map_err(map_err)?;
+        let result = q.fetch_all(&mut *conn).await.map_err(map_err)?;
         let execution_time = start.elapsed().as_secs_f64();
 
         if result.is_empty() {
@@ -1212,7 +1237,7 @@ pub async fn execute_query(
             affected_rows: None,
         })
     } else {
-        let res = q.execute(&pool).await.map_err(map_err)?;
+        let res = q.execute(&mut *conn).await.map_err(map_err)?;
         let execution_time = start.elapsed().as_secs_f64();
         Ok(QueryResult {
             columns: vec![],
@@ -1313,4 +1338,115 @@ pub async fn get_routines(
     }
 
     Ok(routines)
+}
+
+pub async fn create_table(
+    connection_id: &str,
+    database: &str,
+    table_name: &str,
+    columns: &[CreateTableColumn],
+) -> Result<(), String> {
+    let pool = {
+        let connections = MYSQL_CONNECTIONS.lock().await;
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
+    };
+
+    if table_name.trim().is_empty() {
+        return Err("表名不能为空".to_string());
+    }
+
+    if columns.is_empty() {
+        return Err("至少需要定义一列".to_string());
+    }
+
+    let mut column_defs = Vec::new();
+    let mut has_primary_key = false;
+
+    for col in columns {
+        let col_name = escape_mysql_ident(&col.name);
+        let col_type = col.data_type.to_uppercase();
+
+        if col_name.is_empty() {
+            return Err("列名不能为空".to_string());
+        }
+
+        let mut def = format!("`{}` {}", col_name, col_type);
+
+        if !col.nullable {
+            def.push_str(" NOT NULL");
+        }
+
+        if let Some(ref default) = col.default_value {
+            def.push_str(&format!(" DEFAULT {}", default));
+        }
+
+        if col.auto_increment {
+            def.push_str(" AUTO_INCREMENT");
+        }
+
+        if col.is_primary_key {
+            has_primary_key = true;
+        }
+
+        column_defs.push(def);
+    }
+
+    if has_primary_key {
+        let pk_cols: Vec<String> = columns
+            .iter()
+            .filter(|c| c.is_primary_key)
+            .map(|c| format!("`{}`", escape_mysql_ident(&c.name)))
+            .collect();
+        if !pk_cols.is_empty() {
+            column_defs.push(format!("PRIMARY KEY ({})", pk_cols.join(", ")));
+        }
+    }
+
+    let query = format!(
+        "CREATE TABLE `{}`.`{}` ({})",
+        escape_mysql_ident(database),
+        escape_mysql_ident(table_name),
+        column_defs.join(", ")
+    );
+
+    sqlx::query(&query)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("创建表失败: {}", e))?;
+
+    Ok(())
+}
+
+pub async fn drop_table(
+    connection_id: &str,
+    database: &str,
+    table_name: &str,
+) -> Result<(), String> {
+    let pool = {
+        let connections = MYSQL_CONNECTIONS.lock().await;
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
+    };
+
+    if table_name.trim().is_empty() {
+        return Err("表名不能为空".to_string());
+    }
+
+    let query = format!(
+        "DROP TABLE `{}`.`{}`",
+        escape_mysql_ident(database),
+        escape_mysql_ident(table_name)
+    );
+
+    sqlx::query(&query)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("删除表失败: {}", e))?;
+
+    Ok(())
 }

@@ -13,6 +13,7 @@ export interface DatabaseConnection {
 }
 
 export interface MySQLTable {
+  schema: string;
   name: string;
   engine: string;
   rows: number;
@@ -24,6 +25,7 @@ export interface MySQLColumn {
   name: string;
   fullType: string;
   type: string;
+  isPrimaryKey: boolean;
   nullable: boolean;
   default: string | null;
   extra: string;
@@ -99,79 +101,11 @@ export interface ConnectionState {
   error: string | null;
 }
 
-// Import/Export types
-export type ExportFormat = 'Json' | 'Sql' | 'Csv';
-export type ImportFormat = 'Json' | 'Sql' | 'Csv';
-export type OnConflictStrategy = 'Skip' | 'Update' | 'Error';
-
-export interface ExportOptions {
-  connectionId: string;
-  database: string;
-  tables: string[];
-  format: ExportFormat;
-  includeStructure: boolean;
-  includeData: boolean;
-  outputPath: string;
-}
-
-export interface ExportResult {
-  success: boolean;
-  message: string;
-  filePath: string;
-  exportedRows: number;
-  exportedTables: number;
-}
-
-export interface ColumnMapping {
-  sourceColumn: string;
-  targetColumn: string;
-  targetType: string;
-  isPrimaryKey: boolean;
-  isNullable: boolean;
+export interface CreateTableColumn {
+  name: string;
+  dataType: string;
+  nullable: boolean;
   defaultValue?: string;
-}
-
-export interface TableMapping {
-  sourceTable: string;
-  targetTable: string;
-  columnMappings: ColumnMapping[];
-}
-
-export interface ImportOptions {
-  connectionId: string;
-  database: string;
-  filePath: string;
-  format: ImportFormat;
-  tableMapping: TableMapping[];
-  onConflict: OnConflictStrategy;
-}
-
-export interface ImportError {
-  table: string;
-  row?: number;
-  message: string;
-}
-
-export interface ImportResult {
-  success: boolean;
-  message: string;
-  importedRows: number;
-  importedTables: number;
-  errors: ImportError[];
-}
-
-export interface SakilaInitOptions {
-  mysqlVersion: string;
-  dockerContainerName: string;
-  hostPort: number;
-  containerPort: number;
-  rootPassword: string;
-  databaseName: string;
-}
-
-export interface SakilaInitResult {
-  success: boolean;
-  message: string;
-  containerId?: string;
-  connectionString?: string;
+  autoIncrement: boolean;
+  isPrimaryKey: boolean;
 }

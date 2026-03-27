@@ -64,7 +64,7 @@
       "endpoints": [
         "https://github.com/yooDoki/skylarkdb/releases/latest/download/latest.json"
       ],
-      "dialog": true,
+      "dialog": false,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlBQzVDRDNGRTNCNzI4MUEKUldRYUtMZmpQODNGbXZVQVkrSXIxdUNzVm9EVVo1Qmc0TnBDZ29WY1A3bDM2c0tmQzY5ZGxucEYK"
     }
   }

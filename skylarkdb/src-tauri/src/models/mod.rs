@@ -20,6 +20,7 @@ pub struct DatabaseConnection {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MySQLTable {
+    pub schema: String,
     pub name: String,
     pub engine: String,
     pub rows: u64,
@@ -32,6 +33,7 @@ pub struct MySQLColumn {
     pub name: String,
     pub full_type: String,
     pub r#type: String,
+    pub is_primary_key: bool,
     pub nullable: bool,
     pub default: Option<String>,
     pub extra: String,
@@ -194,6 +196,17 @@ pub enum OnConflictStrategy {
     Skip,
     Update,
     Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTableColumn {
+    pub name: String,
+    pub data_type: String,
+    pub nullable: bool,
+    pub default_value: Option<String>,
+    pub auto_increment: bool,
+    pub is_primary_key: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

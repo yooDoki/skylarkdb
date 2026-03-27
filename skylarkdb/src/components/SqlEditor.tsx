@@ -3,10 +3,11 @@ import CodeMirror from '@uiw/react-codemirror';
 import { sql, MySQL } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { basicSetup } from 'codemirror';
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { Prec } from '@codemirror/state';
 import { completionKeymap } from '@codemirror/autocomplete';
 import { MySQLTable, MySQLColumn, MySQLRoutine } from '@/types';
+import { useSettings } from '@/hooks/useSettings';
 
 function useDocumentDarkClass(): boolean {
   const [dark, setDark] = useState(() =>
@@ -62,6 +63,10 @@ export interface SqlEditorProps {
   routines?: MySQLRoutine[];
   placeholder?: string;
   className?: string;
+  height?: string;
+  minHeight?: string;
+  showLineNumbers?: boolean;
+  wordWrap?: boolean;
 }
 
 export function SqlEditor({
@@ -73,10 +78,19 @@ export function SqlEditor({
   routines = [],
   placeholder = '输入 SQL 查询语句...',
   className,
+  height = '240px',
+  minHeight = '120px',
+  showLineNumbers: showLineNumbersProp,
+  wordWrap: wordWrapProp,
 }: SqlEditorProps) {
   const isDark = useDocumentDarkClass();
   const executeRef = useRef(onExecute);
+  const { settings } = useSettings();
   executeRef.current = onExecute;
+
+  // Use props if provided, otherwise fall back to settings
+  const showLineNumbers = showLineNumbersProp ?? settings.showLineNumbers;
+  const wordWrap = wordWrapProp ?? settings.wordWrap;
 
   const schema = useMemo(() => {
     const s: Record<string, string[]> = {};
@@ -95,40 +109,53 @@ export function SqlEditor({
   }, [tables, tableColumns, routines]);
 
   const extensions = useMemo(
-    () => [
-      basicSetup,
-      EditorView.contentAttributes.of({ 'data-language': 'text/x-mysql' }),
-      sql({
-        dialect: MySQL,
-        schema,
-        upperCaseKeywords: false,
-      }),
-      EditorView.lineWrapping,
-      keymap.of(completionKeymap),
-      Prec.highest(
-        keymap.of([
-          {
-            key: 'Mod-Enter',
-            run: () => {
-              executeRef.current?.();
-              return true;
+    () => {
+      const exts = [
+        basicSetup,
+        EditorView.contentAttributes.of({ 'data-language': 'text/x-mysql' }),
+        sql({
+          dialect: MySQL,
+          schema,
+          upperCaseKeywords: false,
+        }),
+        keymap.of(completionKeymap),
+        Prec.highest(
+          keymap.of([
+            {
+              key: 'Mod-Enter',
+              run: () => {
+                executeRef.current?.();
+                return true;
+              },
             },
-          },
-        ])
-      ),
-      isDark ? oneDark : lightSqlTheme,
-    ],
-    [schema, isDark]
+          ])
+        ),
+        isDark ? oneDark : lightSqlTheme,
+      ];
+
+      // Apply word wrap setting
+      if (wordWrap) {
+        exts.push(EditorView.lineWrapping);
+      }
+
+      // Apply line numbers setting
+      if (showLineNumbers) {
+        exts.push(lineNumbers());
+      }
+
+      return exts;
+    },
+    [schema, isDark, wordWrap, showLineNumbers]
   );
 
   return (
     <div
-      className={`rounded-lg border border-input overflow-hidden focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all ${className ?? ''}`}
+      className={`rounded-xl border border-border/70 bg-background overflow-hidden shadow-sm focus-within:border-primary/60 focus-within:ring-4 focus-within:ring-primary/10 transition-all ${className ?? ''}`}
     >
       <CodeMirror
         value={value}
-        height="200px"
-        minHeight="120px"
+        height={height}
+        minHeight={minHeight}
         theme="none"
         basicSetup={false}
         extensions={extensions}
