@@ -145,6 +145,24 @@ pub async fn drop_mysql_table(
 }
 
 #[command]
+pub async fn add_mysql_column(
+    connection_id: String,
+    table_name: String,
+    column: AddColumnOptions,
+) -> Result<(), String> {
+    mysql::add_column(&connection_id, &table_name, &column).await
+}
+
+#[command]
+pub async fn drop_mysql_column(
+    connection_id: String,
+    table_name: String,
+    column_name: String,
+) -> Result<(), String> {
+    mysql::drop_column(&connection_id, &table_name, &column_name).await
+}
+
+#[command]
 pub async fn set_mysql_default_database(
     connection_id: String,
     database: String,

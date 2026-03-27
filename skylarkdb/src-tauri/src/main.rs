@@ -27,6 +27,8 @@ fn main() {
             commands::mysql::delete_mysql_record,
             commands::mysql::create_mysql_table,
             commands::mysql::drop_mysql_table,
+            commands::mysql::add_mysql_column,
+            commands::mysql::drop_mysql_column,
             commands::mysql::set_mysql_default_database,
             commands::mysql::export_mysql_data,
             commands::mysql::import_mysql_data,

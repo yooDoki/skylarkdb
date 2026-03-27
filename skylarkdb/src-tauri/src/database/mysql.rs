@@ -1450,3 +1450,107 @@ pub async fn drop_table(
 
     Ok(())
 }
+
+pub async fn add_column(
+    connection_id: &str,
+    table_name: &str,
+    column: &AddColumnOptions,
+) -> Result<(), String> {
+    let pool = {
+        let connections = MYSQL_CONNECTIONS.lock().await;
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
+    };
+
+    let default_db = {
+        let meta = MYSQL_DEFAULT_DATABASE.lock().await;
+        meta.get(connection_id).cloned().flatten()
+    };
+
+    let database_name = resolve_table_schema(&pool, table_name, default_db.as_deref()).await?;
+    set_default_database(connection_id, &database_name).await;
+
+    let col_name = escape_mysql_ident(&column.name);
+    if col_name.is_empty() {
+        return Err("列名不能为空".to_string());
+    }
+
+    let col_type = column.data_type.to_uppercase();
+    let mut col_def = format!("`{}` {}", col_name, col_type);
+
+    if !column.nullable {
+        col_def.push_str(" NOT NULL");
+    }
+
+    if let Some(ref default) = column.default_value {
+        col_def.push_str(&format!(" DEFAULT {}", default));
+    }
+
+    if column.auto_increment {
+        col_def.push_str(" AUTO_INCREMENT");
+    }
+
+    let mut query = format!(
+        "ALTER TABLE `{}`.`{}` ADD COLUMN {}",
+        escape_mysql_ident(&database_name),
+        escape_mysql_ident(table_name),
+        col_def
+    );
+
+    if let Some(ref after) = column.after_column {
+        if !after.trim().is_empty() {
+            query.push_str(&format!(" AFTER `{}`", escape_mysql_ident(after)));
+        }
+    } else if column.first {
+        query.push_str(" FIRST");
+    }
+
+    sqlx::query(&query)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("新增列失败: {}", e))?;
+
+    Ok(())
+}
+
+pub async fn drop_column(
+    connection_id: &str,
+    table_name: &str,
+    column_name: &str,
+) -> Result<(), String> {
+    let pool = {
+        let connections = MYSQL_CONNECTIONS.lock().await;
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
+    };
+
+    let default_db = {
+        let meta = MYSQL_DEFAULT_DATABASE.lock().await;
+        meta.get(connection_id).cloned().flatten()
+    };
+
+    let database_name = resolve_table_schema(&pool, table_name, default_db.as_deref()).await?;
+    set_default_database(connection_id, &database_name).await;
+
+    if column_name.trim().is_empty() {
+        return Err("列名不能为空".to_string());
+    }
+
+    let query = format!(
+        "ALTER TABLE `{}`.`{}` DROP COLUMN `{}`",
+        escape_mysql_ident(&database_name),
+        escape_mysql_ident(table_name),
+        escape_mysql_ident(column_name)
+    );
+
+    sqlx::query(&query)
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("删除列失败: {}", e))?;
+
+    Ok(())
+}

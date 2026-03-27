@@ -109,3 +109,13 @@ export interface CreateTableColumn {
   autoIncrement: boolean;
   isPrimaryKey: boolean;
 }
+
+export interface AddColumnOptions {
+  name: string;
+  dataType: string;
+  nullable: boolean;
+  defaultValue?: string;
+  autoIncrement: boolean;
+  first?: boolean;
+  afterColumn?: string;
+}

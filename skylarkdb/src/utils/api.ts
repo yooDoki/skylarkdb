@@ -9,6 +9,7 @@ import {
   MySQLColumn,
   MySQLRoutine,
   CreateTableColumn,
+  AddColumnOptions,
 } from '@/types';
 
 export async function testMySQLConnection(params: {
@@ -153,6 +154,22 @@ export async function dropMySQLTable(
   tableName: string
 ): Promise<void> {
   return invoke<void>('drop_mysql_table', { connectionId, database, tableName });
+}
+
+export async function addMySQLColumn(
+  connectionId: string,
+  tableName: string,
+  column: AddColumnOptions
+): Promise<void> {
+  return invoke<void>('add_mysql_column', { connectionId, tableName, column });
+}
+
+export async function dropMySQLColumn(
+  connectionId: string,
+  tableName: string,
+  columnName: string
+): Promise<void> {
+  return invoke<void>('drop_mysql_column', { connectionId, tableName, columnName });
 }
 
 export async function setMySQLDefaultDatabase(

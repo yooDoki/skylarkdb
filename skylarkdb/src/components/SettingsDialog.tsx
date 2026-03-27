@@ -7,6 +7,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogTrigger,
   DialogTitle,
 } from './ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
@@ -60,19 +61,19 @@ export function SettingsDialog({ open: controlledOpen, onOpenChange, trigger }: 
   const ThemeOption = ({ value, icon: Icon, label }: { value: ThemeMode; icon: typeof Sun; label: string }) => (
     <button
       onClick={() => updateSetting('theme', value)}
-      className={`flex items-center gap-3 p-3 rounded-lg border transition-all hover:bg-accent ${
+      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-all ${
         settings.theme === value
-          ? 'border-primary bg-primary/5 ring-1 ring-primary'
-          : 'border-border'
+          ? 'border-primary bg-primary/5 ring-1 ring-primary/60 shadow-sm'
+          : 'border-border bg-background hover:border-primary/25 hover:bg-accent/40'
       }`}
     >
-      <div className={`p-2 rounded-md ${
-        settings.theme === value ? 'bg-primary text-primary-foreground' : 'bg-muted'
+      <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+        settings.theme === value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
       }`}>
         <Icon className="h-4 w-4" />
       </div>
-      <span className="text-sm font-medium">{label}</span>
-      {settings.theme === value && <Check className="h-4 w-4 ml-auto text-primary" />}
+      <span className="text-sm font-medium leading-none">{label}</span>
+      {settings.theme === value && <Check className="ml-auto h-4 w-4 text-primary" />}
     </button>
   );
 
@@ -105,19 +106,20 @@ export function SettingsDialog({ open: controlledOpen, onOpenChange, trigger }: 
 
   return (
     <>
-      {trigger || (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setOpen(true)}
-          className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
-          title="设置 (⌘,)"
-        >
-          <Settings className="h-4 w-4" />
-        </Button>
-      )}
-
       <Dialog open={isOpen} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          {trigger || (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
+              title="设置 (⌘,)"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          )}
+        </DialogTrigger>
+
         <DialogContent className="sm:max-w-[560px] h-[600px] max-h-[85vh] p-0 overflow-hidden flex flex-col">
           <DialogHeader className="px-6 pt-6 pb-2">
             <DialogTitle className="flex items-center gap-2">
@@ -131,20 +133,20 @@ export function SettingsDialog({ open: controlledOpen, onOpenChange, trigger }: 
 
           <Tabs defaultValue="appearance" className="flex-1 flex flex-col min-h-0">
             <div className="px-6 pb-2">
-              <TabsList className="grid grid-cols-4 w-full">
-                <TabsTrigger value="appearance" className="flex items-center gap-1.5 text-xs">
+              <TabsList className="grid w-full grid-cols-4 gap-1 rounded-xl bg-muted/60 p-1">
+                <TabsTrigger value="appearance" className="flex items-center gap-1.5 rounded-lg text-[13px]">
                   <Palette className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">外观</span>
                 </TabsTrigger>
-                <TabsTrigger value="editor" className="flex items-center gap-1.5 text-xs">
+                <TabsTrigger value="editor" className="flex items-center gap-1.5 rounded-lg text-[13px]">
                   <Code className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">编辑器</span>
                 </TabsTrigger>
-                <TabsTrigger value="connection" className="flex items-center gap-1.5 text-xs">
+                <TabsTrigger value="connection" className="flex items-center gap-1.5 rounded-lg text-[13px]">
                   <Database className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">连接</span>
                 </TabsTrigger>
-                <TabsTrigger value="about" className="flex items-center gap-1.5 text-xs">
+                <TabsTrigger value="about" className="flex items-center gap-1.5 rounded-lg text-[13px]">
                   <Info className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">关于</span>
                 </TabsTrigger>
@@ -164,10 +166,12 @@ export function SettingsDialog({ open: controlledOpen, onOpenChange, trigger }: 
                         </CardTitle>
                         <CardDescription className="text-xs">选择您喜欢的外观主题</CardDescription>
                       </CardHeader>
-                      <CardContent className="space-y-2">
-                        <ThemeOption value="light" icon={Sun} label="浅色模式" />
-                        <ThemeOption value="dark" icon={Moon} label="深色模式" />
-                        <ThemeOption value="system" icon={Monitor} label="跟随系统" />
+                      <CardContent>
+                        <div className="grid grid-cols-3 gap-3">
+                          <ThemeOption value="light" icon={Sun} label="浅色模式" />
+                          <ThemeOption value="dark" icon={Moon} label="深色模式" />
+                          <ThemeOption value="system" icon={Monitor} label="跟随系统" />
+                        </div>
                       </CardContent>
                     </Card>
 

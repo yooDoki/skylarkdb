@@ -212,6 +212,18 @@ pub struct CreateTableColumn {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AddColumnOptions {
+    pub name: String,
+    pub data_type: String,
+    pub nullable: bool,
+    pub default_value: Option<String>,
+    pub auto_increment: bool,
+    pub first: bool,
+    pub after_column: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ImportResult {
     pub success: bool,
     pub message: String,

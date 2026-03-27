@@ -7,15 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
   Database, Table2, Search, RefreshCw, ChevronRight, ChevronDown,
   ChevronLeft, ChevronsLeft, ChevronsRight, ArrowLeft, Loader2, Folder, FolderOpen,
-  Plus, Trash2, KeyRound, Pencil, Save, X
+  Plus, Trash2, KeyRound, Pencil, Save, X, AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import { getMySQLColumns, getMySQLTableData, getMySQLTables, getMySQLDatabases, setMySQLDefaultDatabase, updateMySQLRecord } from '@/utils/api';
+import { getMySQLColumns, getMySQLTableData, getMySQLTables, getMySQLDatabases, setMySQLDefaultDatabase, updateMySQLRecord, dropMySQLColumn } from '@/utils/api';
 import { CreateTableDialog } from '@/components/CreateTableDialog';
 import { DeleteTableDialog } from '@/components/DeleteTableDialog';
+import { AddColumnDialog } from '@/components/AddColumnDialog';
 
 const DEFAULT_PAGE_SIZE = 10;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200];
@@ -50,6 +52,8 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
   const [pendingTable, setPendingTable] = useState<string | null>(null);
   const [showCreateTable, setShowCreateTable] = useState(false);
   const [deleteTableName, setDeleteTableName] = useState<string | null>(null);
+  const [showAddColumn, setShowAddColumn] = useState(false);
+  const [dropColumnInfo, setDropColumnInfo] = useState<{ tableName: string; columnName: string } | null>(null);
   const [editingRowKey, setEditingRowKey] = useState<string | null>(null);
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
   const [savingRowKey, setSavingRowKey] = useState<string | null>(null);
@@ -164,6 +168,37 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
       setTableData(null);
     }
   }, [activeConnection.connection?.id, selectedDatabase, loadTables, viewingTable, deleteTableName]);
+
+  const handleAddColumnSuccess = useCallback(() => {
+    if (viewingTable) {
+      setTableColumns(prev => {
+        const next = new Map(prev);
+        next.delete(viewingTable);
+        return next;
+      });
+      tableCache.current.clear();
+      if (activeConnection.connection?.id) {
+        loadTableColumns(viewingTable);
+        loadTableData(viewingTable, currentPage);
+      }
+    }
+  }, [viewingTable, currentPage, activeConnection.connection?.id, loadTableColumns, loadTableData]);
+
+  const handleDropColumnSuccess = useCallback(() => {
+    if (viewingTable) {
+      setTableColumns(prev => {
+        const next = new Map(prev);
+        next.delete(viewingTable);
+        return next;
+      });
+      tableCache.current.clear();
+      if (activeConnection.connection?.id) {
+        loadTableColumns(viewingTable);
+        loadTableData(viewingTable, currentPage);
+      }
+    }
+    setDropColumnInfo(null);
+  }, [viewingTable, currentPage, activeConnection.connection?.id, loadTableColumns, loadTableData]);
 
   const loadTableData = useCallback(async (
     tableName: string,
@@ -797,7 +832,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                           {tableColumns.get(table.name)!.map((column) => (
                             <div
                               key={`${table.name}-${column.name}`}
-                              className="flex items-start gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-background/70"
+                              className="group/column flex items-start gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-background/70"
                             >
                               <div className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-background text-muted-foreground">
                                 {column.isPrimaryKey ? (
@@ -831,6 +866,16 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                   {column.fullType}
                                 </div>
                               </div>
+                              <button
+                                className="flex-shrink-0 p-0.5 rounded hover:bg-destructive/10 transition-colors opacity-0 group-hover/column:opacity-100"
+                                title={`删除列 ${column.name}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDropColumnInfo({ tableName: table.name, columnName: column.name });
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -911,6 +956,15 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                     >
                       <RefreshCw className="h-3 w-3 mr-1" />
                       刷新
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7"
+                      onClick={() => setShowAddColumn(true)}
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      新增列
                     </Button>
                     <Button
                       variant="outline"
@@ -1217,6 +1271,52 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
           tableName={deleteTableName}
           onSuccess={handleDeleteSuccess}
         />
+      )}
+
+      <AddColumnDialog
+        open={showAddColumn}
+        onOpenChange={setShowAddColumn}
+        tableName={viewingTable!}
+        existingColumns={currentTableColumns}
+        onSuccess={handleAddColumnSuccess}
+      />
+
+      {dropColumnInfo && (
+        <Dialog open={!!dropColumnInfo} onOpenChange={(open) => !open && setDropColumnInfo(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="h-5 w-5" />
+                删除列
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-sm text-muted-foreground mb-4">
+                确定要删除表 <span className="font-mono font-medium text-foreground">{dropColumnInfo.tableName}</span> 的列 <span className="font-mono font-medium text-foreground">{dropColumnInfo.columnName}</span> 吗？
+              </p>
+              <p className="text-xs text-destructive">
+                此操作不可恢复，列中的所有数据都将被永久删除。
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDropColumnInfo(null)}>取消</Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  if (!activeConnection.connection?.id) return;
+                  try {
+                    await dropMySQLColumn(activeConnection.connection.id, dropColumnInfo.tableName, dropColumnInfo.columnName);
+                    handleDropColumnSuccess();
+                  } catch (err) {
+                    console.error('Failed to drop column:', err);
+                  }
+                }}
+              >
+                删除
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
