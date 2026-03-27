@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { RefreshCw, Download, CheckCircle, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 
-export function UpdateChecker({ autoCheck = false }: { autoCheck?: boolean }) {
+export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck?: boolean; currentVersion?: string }) {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -133,7 +133,7 @@ export function UpdateChecker({ autoCheck = false }: { autoCheck?: boolean }) {
               发现新版本
             </DialogTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              SkylarkDB {updateInfo?.version} 可用，您当前的版本是 v0.1.3
+              SkylarkDB {updateInfo?.version} 可用，您当前的版本是 {currentVersion || '未知'}
             </p>
           </DialogHeader>
           

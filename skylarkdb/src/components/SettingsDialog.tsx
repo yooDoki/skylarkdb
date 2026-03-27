@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
 import { Input } from './ui/input';
@@ -40,9 +41,19 @@ export function SettingsDialog({ open: controlledOpen, onOpenChange, trigger }: 
   const [internalOpen, setInternalOpen] = useState(false);
   const { settings, updateSetting, resetSettings, isLoaded } = useSettings();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>('');
 
   const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen;
   const setOpen = onOpenChange || setInternalOpen;
+
+  // Load app version on mount
+  useEffect(() => {
+    getVersion().then(version => {
+      setAppVersion(`v${version}`);
+    }).catch(() => {
+      setAppVersion('v0.0.0');
+    });
+  }, []);
 
   // Handle keyboard shortcut (Cmd/Ctrl + ,)
   useEffect(() => {
@@ -399,7 +410,7 @@ export function SettingsDialog({ open: controlledOpen, onOpenChange, trigger }: 
                       <CardContent className="p-0">
                         <div className="flex items-center justify-between py-3 px-4 border-b border-border">
                           <span className="text-sm text-muted-foreground">版本</span>
-                          <span className="text-sm font-mono font-medium">v0.1.3</span>
+                          <span className="text-sm font-mono font-medium">{appVersion || '加载中...'}</span>
                         </div>
                         <div className="flex items-center justify-between py-3 px-4 border-b border-border">
                           <span className="text-sm text-muted-foreground">许可证</span>
@@ -407,7 +418,7 @@ export function SettingsDialog({ open: controlledOpen, onOpenChange, trigger }: 
                         </div>
                         <div className="flex items-center justify-between py-3 px-4">
                           <span className="text-sm text-muted-foreground">检查更新</span>
-                          <UpdateChecker />
+                          <UpdateChecker currentVersion={appVersion} />
                         </div>
                       </CardContent>
                     </Card>
