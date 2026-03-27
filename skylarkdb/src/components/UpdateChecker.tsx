@@ -14,6 +14,29 @@ export function UpdateChecker({ autoCheck = false }: { autoCheck?: boolean }) {
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
 
+  const normalizeUpdateError = (err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    const lower = message.toLowerCase();
+
+    if (
+      lower.includes('404')
+      || lower.includes('not found')
+      || lower.includes('failed to deserialize response')
+    ) {
+      return {
+        silent: true,
+        result: '暂未获取到更新信息',
+        error: null,
+      };
+    }
+
+    return {
+      silent: false,
+      result: '检查失败',
+      error: message || '检查更新时发生未知错误',
+    };
+  };
+
   const checkForUpdates = async () => {
     setIsChecking(true);
     setCheckResult('');
@@ -32,8 +55,9 @@ export function UpdateChecker({ autoCheck = false }: { autoCheck?: boolean }) {
       }
     } catch (err) {
       console.error('检查更新失败:', err);
-      setError(err instanceof Error ? err.message : '检查更新时发生未知错误');
-      setCheckResult('检查失败');
+      const normalized = normalizeUpdateError(err);
+      setError(normalized.error);
+      setCheckResult(normalized.result);
     } finally {
       setIsChecking(false);
     }

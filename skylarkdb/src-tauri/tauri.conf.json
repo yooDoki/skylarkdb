@@ -28,6 +28,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "category": "DeveloperTool",
     "copyright": "",
     "externalBin": [],
