@@ -23,7 +23,7 @@ const defaultSettings: SettingsState = {
   wordWrap: true,
   autoSave: true,
   confirmBeforeDelete: true,
-  rowsPerPage: 10,
+  rowsPerPage: 15,
 };
 
 const SETTINGS_KEY = 'skylarkdb-settings';

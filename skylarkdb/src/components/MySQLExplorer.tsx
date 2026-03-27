@@ -19,8 +19,8 @@ import { CreateTableDialog } from '@/components/CreateTableDialog';
 import { DeleteTableDialog } from '@/components/DeleteTableDialog';
 import { AddColumnDialog } from '@/components/AddColumnDialog';
 
-const DEFAULT_PAGE_SIZE = 10;
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200];
+const DEFAULT_PAGE_SIZE = 15;
+const PAGE_SIZE_OPTIONS = [15, 25, 50, 100, 200];
 
 interface TableCache {
   data: TableData;
@@ -806,7 +806,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                       "h-3.5 w-3.5 flex-shrink-0 transition-colors",
                       viewingTable === table.name ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
                     )} />
-                    <span className="text-xs truncate flex-1">{table.name}</span>
+                    <span className="text-xs truncate flex-1" title={table.name}>{table.name}</span>
                     <Badge
                       variant="outline"
                       className={cn(
@@ -845,7 +845,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span className="truncate text-[11px] font-medium text-foreground">{column.name}</span>
+                                  <span className="truncate text-[11px] font-medium text-foreground" title={column.name}>{column.name}</span>
                                   {column.isPrimaryKey && (
                                     <Badge variant="outline" className="h-4 px-1 text-[9px] uppercase border-amber-200 bg-amber-50 text-amber-700">
                                       PK
