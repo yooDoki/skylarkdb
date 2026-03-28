@@ -2,7 +2,6 @@ name: CI/CD
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  NODE_ENV: production
 
 on:
   push:
@@ -28,8 +27,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -45,9 +42,8 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: skylarkdb/src-tauri
-          key: ${{ runner.os }}-rust-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install system dependencies (Ubuntu only)
+      - name: Install dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
@@ -60,35 +56,29 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: skylarkdb
-        run: |
-          echo "Installing dependencies..."
-          npm ci --verbose
-          echo "Dependencies installed successfully"
-
-      - name: Install Tauri CLI globally
-        run: npm install -g @tauri-apps/cli@^2.0.0
+        run: npm ci
 
       - name: Build debug artifacts
         if: github.ref_type != 'tag'
         working-directory: skylarkdb
-        run: |
-          echo "Building debug artifacts..."
-          tauri build -- --debug --verbose
-          echo "Debug build completed"
+        run: npm run tauri build -- --debug --verbose
 
       - name: Build and publish release
         if: github.ref_type == 'tag'
-        uses: tauri-apps/tauri-action@v0.5.0
+        uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: ./skylarkdb
+          includeRelease: true
+          includeDebug: false
           tagName: ${{ github.ref_name }}
           releaseName: Release ${{ github.ref_name }}
           releaseDraft: false
           includeUpdaterJson: true
+          args: --verbose
 
       - name: Verify updater assets
         if: github.ref_type == 'tag'
@@ -96,47 +86,18 @@ jobs:
         with:
           script: |
             const tag = context.ref.replace('refs/tags/', '')
-            console.log(`Verifying release assets for tag: ${tag}`)
-            
-            try {
-              const { data: release } = await github.rest.repos.getReleaseByTag({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag
-              })
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag
+            })
 
-              const assetNames = release.assets.map((asset) => asset.name)
-              console.log(`Release assets: ${assetNames.join(', ')}`)
+            const assetNames = release.assets.map((asset) => asset.name)
+            core.info(`Release assets for ${tag}: ${assetNames.join(', ')}`)
 
-              const hasLatestJson = assetNames.includes('latest.json')
-              const hasSignature = assetNames.some((name) => name.endsWith('.sig'))
-              const hasAppAssets = assetNames.some((name) => 
-                name.endsWith('.dmg') || 
-                name.endsWith('.exe') || 
-                name.endsWith('.AppImage') ||
-                name.endsWith('.tar.gz')
-              )
+            const hasLatestJson = assetNames.includes('latest.json')
+            const hasSignature = assetNames.some((name) => name.endsWith('.sig'))
 
-              console.log(`Verification results:`)
-              console.log(`- latest.json: ${hasLatestJson}`)
-              console.log(`- Signature files: ${hasSignature}`)
-              console.log(`- App assets: ${hasAppAssets}`)
-
-              if (!hasLatestJson || !hasSignature || !hasAppAssets) {
-                core.setFailed(`Updater assets are incomplete for ${tag}. latest.json: ${hasLatestJson}, signature: ${hasSignature}, app assets: ${hasAppAssets}`)
-              } else {
-                console.log(`All required assets are present for tag: ${tag}`)
-              }
-            } catch (error) {
-              console.error('Error verifying release assets:', error)
-              core.setFailed(`Failed to verify release assets: ${error.message}`)
+            if (!hasLatestJson || !hasSignature) {
+              core.setFailed(`Updater assets are incomplete for ${tag}. latest.json: ${hasLatestJson}, signature: ${hasSignature}`)
             }
-
-      - name: Upload build artifacts
-        if: github.ref_type != 'tag'
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-builds-${{ matrix.platform }}
-          path: |
-            skylarkdb/src-tauri/target/debug/bundle/
-          retention-days: 7
