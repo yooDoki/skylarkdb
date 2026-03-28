@@ -70,7 +70,7 @@ jobs:
         working-directory: skylarkdb
         run: |
           echo "Building debug artifacts..."
-          npx tauri build -- --debug --verbose
+          npm run tauri:build -- --debug --verbose
           echo "Debug build completed"
 
       - name: Build and publish release
