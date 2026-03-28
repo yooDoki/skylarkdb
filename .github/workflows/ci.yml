@@ -68,8 +68,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: ./skylarkdb
           includeRelease: true
@@ -77,27 +75,5 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: Release ${{ github.ref_name }}
           releaseDraft: false
-          includeUpdaterJson: true
+          includeUpdaterJson: false
           args: --verbose
-
-      - name: Verify updater assets
-        if: github.ref_type == 'tag'
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const tag = context.ref.replace('refs/tags/', '')
-            const { data: release } = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag
-            })
-
-            const assetNames = release.assets.map((asset) => asset.name)
-            core.info(`Release assets for ${tag}: ${assetNames.join(', ')}`)
-
-            const hasLatestJson = assetNames.includes('latest.json')
-            const hasSignature = assetNames.some((name) => name.endsWith('.sig'))
-
-            if (!hasLatestJson || !hasSignature) {
-              core.setFailed(`Updater assets are incomplete for ${tag}. latest.json: ${hasLatestJson}, signature: ${hasSignature}`)
-            }
