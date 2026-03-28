@@ -34,7 +34,7 @@ import {
 // Check if running in Tauri environment
 const isTauriApp = () => {
   try {
-    return typeof window !== 'undefined' && window.__TAURI__;
+    return typeof window !== 'undefined' && !!(window as any).__TAURI__;
   } catch {
     return false;
   }
