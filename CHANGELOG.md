@@ -5,13 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.5] - 2026-03-28
 
 ### Added
 - 自动更新功能集成
 - 自动滚动到选中表功能
 - 表列表美化滚动条样式
 - 版本号动态获取（从 Tauri API）
+- 版本发布规范文档和 CHANGELOG
 
 ### Changed
 - 优化表列表滚动体验
@@ -20,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - 修复版本号硬编码问题
 - 修复 tauri-action 配置参数
+- 修复设置对话框在开发模式下无法打开
+- 同步 Cargo.toml 版本号
+
+## [Unreleased]
 
 ## [0.1.4] - 2024-03-27
 
@@ -43,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 初始版本发布
 - 基础 UI 框架搭建
 
-[Unreleased]: https://github.com/yooDoki/skylarkdb/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/yooDoki/skylarkdb/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/yooDoki/skylarkdb/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/yooDoki/skylarkdb/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/yooDoki/skylarkdb/releases/tag/v0.1.3
