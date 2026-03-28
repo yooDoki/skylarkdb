@@ -50,7 +50,7 @@ export function SettingsDialog({ open: controlledOpen, onOpenChange, trigger }: 
   useEffect(() => {
     getVersion()
       .then(version => setAppVersion(`v${version}`))
-      .catch(() => setAppVersion('v0.1.5'));
+      .catch(() => setAppVersion('v0.1.6'));
   }, []);
 
   // Handle keyboard shortcut (Cmd/Ctrl + ,)
