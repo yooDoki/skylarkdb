@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.6] - 2026-03-28
+## [0.1.7] - 2026-03-28
 
 ### Added
 - 自动更新功能集成
@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 修复设置对话框在开发模式下无法打开
 - 同步 Cargo.toml 版本号
 - 修复普通 CI 构建误触发 updater 签名的问题
+- 重新生成 updater 签名密钥并更新公钥配置
 
 ## [Unreleased]
 
@@ -49,7 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 初始版本发布
 - 基础 UI 框架搭建
 
-[Unreleased]: https://github.com/yooDoki/skylarkdb/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/yooDoki/skylarkdb/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/yooDoki/skylarkdb/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/yooDoki/skylarkdb/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/yooDoki/skylarkdb/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/yooDoki/skylarkdb/compare/v0.1.3...v0.1.4
