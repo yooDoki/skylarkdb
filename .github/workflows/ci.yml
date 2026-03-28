@@ -28,7 +28,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: skylarkdb/package-lock.json
 
@@ -61,6 +61,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Force Node.js 24 to avoid deprecation warnings
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           projectPath: ./skylarkdb
           includeRelease: ${{ github.ref_type == 'tag' }}
@@ -69,6 +71,7 @@ jobs:
           releaseName: ${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || '' }}
           releaseDraft: false
           includeUpdaterJson: true
+          args: --verbose
 
       - name: Verify updater assets
         if: github.ref_type == 'tag'

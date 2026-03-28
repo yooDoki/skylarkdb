@@ -27,6 +27,9 @@ dist-ssr
 tauri/target/
 src-tauri/target/
 
+# Tauri signing keys
+.tauri/
+
 # Environment variables
 .env
 .env.local
