@@ -58,20 +58,24 @@ jobs:
         working-directory: skylarkdb
         run: npm ci
 
-      - name: Build the app
-        uses: tauri-apps/tauri-action@v0
+      - name: Build debug artifacts
+        if: github.ref_type != 'tag'
+        working-directory: skylarkdb
+        run: npm run tauri build -- --debug --config src-tauri/tauri.ci.debug.conf.json --verbose
+
+      - name: Build and publish release
+        if: github.ref_type == 'tag'
+        uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Force Node.js 24 to avoid deprecation warnings
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           projectPath: ./skylarkdb
-          includeRelease: ${{ github.ref_type == 'tag' }}
-          includeDebug: ${{ github.ref_type != 'tag' }}
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: ${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || '' }}
+          includeRelease: true
+          includeDebug: false
+          tagName: ${{ github.ref_name }}
+          releaseName: Release ${{ github.ref_name }}
           releaseDraft: false
           includeUpdaterJson: true
           args: --verbose
