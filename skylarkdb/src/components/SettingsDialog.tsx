@@ -31,15 +31,6 @@ import {
   Code,
 } from 'lucide-react';
 
-// Check if running in Tauri environment
-const isTauriApp = () => {
-  try {
-    return typeof window !== 'undefined' && !!(window as any).__TAURI__;
-  } catch {
-    return false;
-  }
-};
-
 interface SettingsDialogProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -57,17 +48,9 @@ export function SettingsDialog({ open: controlledOpen, onOpenChange, trigger }: 
 
   // Load app version on mount
   useEffect(() => {
-    if (!isTauriApp()) {
-      setAppVersion('v0.1.5 (Dev)');
-      return;
-    }
-
-    getVersion().then(version => {
-      setAppVersion(`v${version}`);
-    }).catch((error) => {
-      console.error('Failed to get version:', error);
-      setAppVersion('v0.1.5');
-    });
+    getVersion()
+      .then(version => setAppVersion(`v${version}`))
+      .catch(() => setAppVersion('v0.1.5'));
   }, []);
 
   // Handle keyboard shortcut (Cmd/Ctrl + ,)
