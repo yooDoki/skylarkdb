@@ -33,31 +33,38 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    /* 更深的背景色，减少眼睛疲劳 */
+    --background: 220 13% 8%;
+    --foreground: 210 20% 96%;
+    --card: 220 13% 10%;
+    --card-foreground: 210 20% 96%;
+    --popover: 220 13% 10%;
+    --popover-foreground: 210 20% 96%;
+    /* 更明亮的主色调 */
+    --primary: 217 91% 65%;
+    --primary-foreground: 220 13% 8%;
+    /* 次级颜色增加对比度 */
+    --secondary: 220 13% 16%;
+    --secondary-foreground: 210 20% 96%;
+    /* 静音区域更明显 */
+    --muted: 220 13% 16%;
+    --muted-foreground: 215 15% 60%;
+    /* 强调色 */
+    --accent: 220 13% 20%;
+    --accent-foreground: 210 20% 96%;
+    /* 错误色更柔和 */
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+    /* 边框更明显 */
+    --border: 220 13% 20%;
+    --input: 220 13% 18%;
+    --ring: 217 91% 60%;
 
-    /* Database brand colors - dark mode */
-    --mysql: 205 90% 60%;
-    --mysql-light: 205 50% 20%;
-    --redis: 8 80% 60%;
-    --redis-light: 8 50% 20%;
+    /* Database brand colors - dark mode optimized */
+    --mysql: 205 90% 65%;
+    --mysql-light: 205 50% 15%;
+    --redis: 8 80% 65%;
+    --redis-light: 8 50% 15%;
   }
 }
 
@@ -69,6 +76,19 @@
     overflow: hidden;
     scrollbar-gutter: stable;
   }
+
+  /* Smooth theme transitions */
+  html, html * {
+    transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+    transition-duration: 0ms;
+  }
+
+  html.theme-transition,
+  html.theme-transition * {
+    transition-duration: 200ms;
+    transition-timing-function: ease-out;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -77,29 +97,32 @@
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - enhanced for dark mode */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: hsl(var(--muted) / 0.3);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.25);
-  border-radius: 3px;
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.4);
+  background: hsl(var(--muted-foreground) / 0.5);
 }
 
-/* Smooth scrolling */
+/* Firefox scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.3) hsl(var(--muted) / 0.3);
 }
 
 /* Prevent layout shift */
@@ -114,14 +137,19 @@
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Card hover effect */
+/* Card hover effect - enhanced for dark mode */
 .card-hover {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .card-hover:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px -2px hsl(var(--foreground) / 0.08);
+}
+
+.dark .card-hover:hover {
+  box-shadow: 0 4px 16px -2px hsl(var(--foreground) / 0.15);
+  border-color: hsl(var(--border) / 0.8);
 }
 
 /* Database type badges */
@@ -150,6 +178,10 @@
   background-color: #22c55e;
   box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px #22c55e40;
   animation: status-pulse-connected 2s ease-in-out infinite;
+}
+
+.dark .status-dot.connected {
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px #22c55e60, 0 0 12px #22c55e40;
 }
 
 .status-dot.connecting {
@@ -215,10 +247,16 @@
   ring-color: hsl(var(--ring));
 }
 
-/* Glass effect for modals */
+/* Glass effect for modals - enhanced for dark mode */
 .glass {
-  background: hsl(var(--background) / 0.8);
-  backdrop-filter: blur(8px);
+  background: hsl(var(--background) / 0.85);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+}
+
+.dark .glass {
+  background: hsl(var(--background) / 0.75);
+  backdrop-filter: blur(16px) saturate(150%);
 }
 
 /* Gradient text */
@@ -365,10 +403,274 @@
 /* Reduce motion for accessibility */
 @media (prefers-reduced-motion: reduce) {
   *,
-  *::before,
+ ::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ============================================
+   Windows 沉浸式无边框标题栏样式
+   ============================================ */
+
+/* 标题栏拖拽区域样式 */
+[data-tauri-drag-region] {
+  /* 标记为可拖拽区域 */
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+/* 标题栏按钮不可拖拽 */
+[data-tauri-drag-region] button,
+[data-tauri-drag-region] .window-controls {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+/* Windows 平台特定样式 */
+@supports (-webkit-app-region: drag) {
+  /* 确保标题栏在 Windows 上显示正确 */
+  .titlebar {
+    position: relative;
+    z-index: 9999;
+  }
+  
+  /* 窗口控制按钮样式优化 */
+  .titlebar-button {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  /* 按钮悬停效果 */
+  .titlebar-button::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: currentColor;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  
+  .titlebar-button:hover::after {
+    opacity: 0.1;
+  }
+  
+  /* 关闭按钮特殊样式 */
+  .titlebar-button-close:hover {
+    background-color: #e81123 !important;
+  }
+  
+  .titlebar-button-close:hover svg {
+    color: white !important;
+  }
+}
+
+/* 窗口最大化时的样式调整 */
+.window-maximized .titlebar {
+  padding-top: 0;
+}
+
+/* 确保内容区域不会被标题栏遮挡 */
+.content-area {
+  margin-top: 0;
+}
+
+/* 透明窗口背景处理 */
+.transparent-window {
+  background: transparent;
+}
+
+/* 毛玻璃效果增强 */
+.glass-titlebar {
+  background: hsl(var(--background) / 0.85);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+}
+
+/* 深色模式下的标题栏 */
+.dark .glass-titlebar {
+  background: hsl(var(--background) / 0.70);
+  border-bottom-color: hsl(var(--border) / 0.5);
+}
+
+/* 窗口边框发光效果（Windows 11 风格） */
+@supports (backdrop-filter: blur(12px)) {
+  .window-glow {
+    box-shadow: 
+      0 0 0 1px hsl(var(--border) / 0.5),
+      0 8px 32px -4px hsl(var(--foreground) / 0.1);
+  }
+}
+
+/* Dark mode table enhancements */
+.dark table {
+  border-color: hsl(var(--border) / 0.5);
+}
+
+.dark tr {
+  border-color: hsl(var(--border) / 0.4);
+}
+
+.dark tr:hover {
+  background-color: hsl(var(--muted) / 0.6);
+}
+
+.dark th {
+  color: hsl(var(--muted-foreground) / 0.9);
+  border-bottom-color: hsl(var(--border) / 0.6);
+}
+
+.dark td {
+  border-bottom-color: hsl(var(--border) / 0.3);
+}
+
+/* Dark mode input enhancements */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: hsl(var(--input));
+  border-color: hsl(var(--border) / 0.5);
+  color: hsl(var(--foreground));
+}
+
+.dark input:focus,
+.dark textarea:focus,
+.dark select:focus {
+  border-color: hsl(var(--primary) / 0.8);
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.2);
+}
+
+/* Dark mode select dropdown */
+.dark [role="listbox"] {
+  background-color: hsl(var(--popover));
+  border-color: hsl(var(--border) / 0.6);
+  box-shadow: 0 4px 20px -2px hsl(var(--foreground) / 0.15);
+}
+
+/* Dark mode dialog enhancements */
+.dark [role="dialog"] {
+  background-color: hsl(var(--background));
+  border-color: hsl(var(--border) / 0.5);
+}
+
+/* Dark mode popover/menu */
+.dark [data-radix-popper-content-wrapper] > div {
+  background-color: hsl(var(--popover));
+  border-color: hsl(var(--border) / 0.5);
+  box-shadow: 0 4px 20px -2px hsl(var(--foreground) / 0.12);
+}
+
+/* Dark mode button enhancements */
+.dark button[variant="secondary"],
+.dark .btn-secondary {
+  background-color: hsl(var(--secondary));
+  border-color: hsl(var(--border) / 0.4);
+}
+
+.dark button[variant="secondary"]:hover,
+.dark .btn-secondary:hover {
+  background-color: hsl(var(--secondary) / 0.8);
+  border-color: hsl(var(--border) / 0.6);
+}
+
+/* Dark mode card enhancements */
+.dark [class*="card"] {
+  border-color: hsl(var(--border) / 0.4);
+}
+
+.dark [class*="card"]:hover {
+  border-color: hsl(var(--border) / 0.6);
+}
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 标题栏动画 */
+@keyframes titlebar-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.titlebar-animate {
+  animation: titlebar-appear 0.2s ease-out;
+}
+
+/* ============================================
+   Dark Mode Additional Enhancements
+   ============================================ */
+
+/* Dark mode code/pre blocks */
+.dark code,
+.dark pre {
+  background-color: hsl(var(--muted) / 0.5);
+  border-color: hsl(var(--border) / 0.4);
+}
+
+/* Dark mode tabs */
+.dark [role="tablist"] {
+  background-color: hsl(var(--muted) / 0.3);
+}
+
+.dark [role="tab"] {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark [role="tab"][data-state="active"] {
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--background));
+}
+
+/* Dark mode badge/tag enhancements */
+.dark .badge {
+  background-color: hsl(var(--secondary));
+  border-color: hsl(var(--border) / 0.4);
+}
+
+/* Dark mode tooltip */
+.dark [role="tooltip"] {
+  background-color: hsl(var(--popover));
+  border-color: hsl(var(--border) / 0.5);
+  box-shadow: 0 4px 12px -2px hsl(var(--foreground) / 0.15);
+}
+
+/* Dark mode separator/divider */
+.dark hr,
+.dark [role="separator"] {
+  border-color: hsl(var(--border) / 0.4);
+}
+
+/* Dark mode skeleton loading */
+.dark .skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 25%,
+    hsl(var(--muted-foreground) / 0.15) 50%,
+    hsl(var(--muted)) 75%
+  );
+  background-size: 200% 100%;
+}
+
+/* Dark mode focus ring enhancement */
+.dark *:focus-visible {
+  outline: 2px solid hsl(var(--ring) / 0.8);
+  outline-offset: 2px;
+}
+
+/* Dark mode hover states for interactive elements */
+.dark .hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dark .hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px hsl(var(--foreground) / 0.12);
 }

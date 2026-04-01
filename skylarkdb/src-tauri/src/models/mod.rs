@@ -12,6 +12,8 @@ pub struct DatabaseConnection {
     pub password: Option<String>,
     #[serde(rename = "hasPassword", default)]
     pub has_password: bool,
+    #[serde(rename = "passwordStorage", default)]
+    pub password_storage: Option<String>,
     pub database: Option<String>,
     pub ssl: bool,
     #[serde(rename = "readOnly", default)]

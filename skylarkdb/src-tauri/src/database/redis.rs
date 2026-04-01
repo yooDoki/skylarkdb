@@ -52,14 +52,15 @@ async fn get_connection_for_db(
 }
 
 pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult, String> {
+    // 只有当密码存储策略为 system 时，才从钥匙串读取密码
     let password = if let Some(password) = connection
         .password
         .as_ref()
         .filter(|s| !s.trim().is_empty())
     {
         Some(password.clone())
-    } else if connection.has_password {
-        Some(secrets::require_connection_password(&connection.id)?)
+    } else if connection.password_storage == Some("system".to_string()) && connection.has_password {
+        Some(secrets::require_connection_password(&connection.id).await?)
     } else {
         None
     };
@@ -111,7 +112,7 @@ pub async fn test_connection(
         Some(password.clone())
     } else if use_stored_secret {
         if let Some(connection_id) = connection_id {
-            Some(secrets::require_connection_password(connection_id)?)
+            Some(secrets::require_connection_password(connection_id).await?)
         } else {
             return Err("缺少连接 ID，无法读取系统钥匙串中的密码".to_string());
         }
@@ -445,4 +446,384 @@ pub async fn select_database(connection_id: &str, db_index: i64) -> Result<(), S
 pub async fn get_selected_database(connection_id: &str) -> i64 {
     let selected_db = REDIS_SELECTED_DATABASE.lock().await;
     selected_db.get(connection_id).copied().unwrap_or(0)
+}
+
+/// 设置 key 的值
+pub async fn set_key(
+    connection_id: &str,
+    key: &str,
+    value: &str,
+    key_type: &str,
+    ttl: Option<i64>,
+) -> Result<(), String> {
+    ensure_connection_writable(connection_id).await?;
+    let (mut con, _db_index) = get_connection_for_db(connection_id).await?;
+
+    // 检查 key 是否存在及其类型
+    let existing_type: String = redis::cmd("TYPE")
+        .arg(key)
+        .query_async(&mut con)
+        .await
+        .unwrap_or_else(|_| "none".to_string());
+
+    // 如果 key 存在但类型不同，需要先删除
+    // 注意：这是 Redis 的限制，不同类型无法直接转换
+    if existing_type != "none" && existing_type != key_type {
+        let _: () = con
+            .del(key)
+            .await
+            .map_err(|e| format!("Failed to delete old key: {}", e))?;
+    }
+
+    // 根据类型设置值
+    // 对于同名同类型的更新，使用原子操作
+    match key_type {
+        "string" => {
+            // SET 命令是原子的
+            let _: () = con
+                .set(key, value)
+                .await
+                .map_err(|e| format!("Failed to set string: {}", e))?;
+        }
+        "hash" => {
+            // value 应为 JSON 格式的 hash
+            let hash_map: std::collections::HashMap<String, String> =
+                serde_json::from_str(value).map_err(|e| format!("Invalid hash JSON: {}", e))?;
+            
+            // 如果类型相同且 key 存在，使用 HSET 进行原子更新
+            // 如果类型不同或 key 不存在，先清空再设置
+            if existing_type == "hash" {
+                // 先删除所有字段
+                let _: () = con
+                    .del(key)
+                    .await
+                    .map_err(|e| format!("Failed to clear hash: {}", e))?;
+            }
+            
+            // 使用 HMSET 批量设置（Redis 3.x+ 使用 HSET 支持多字段）
+            if !hash_map.is_empty() {
+                let mut cmd = redis::cmd("HSET");
+                cmd.arg(key);
+                for (field, val) in &hash_map {
+                    cmd.arg(field).arg(val);
+                }
+                let _: () = cmd
+                    .query_async(&mut con)
+                    .await
+                    .map_err(|e| format!("Failed to set hash fields: {}", e))?;
+            }
+        }
+        "list" => {
+            let items: Vec<String> =
+                serde_json::from_str(value).map_err(|e| format!("Invalid list JSON: {}", e))?;
+            
+            // 如果类型相同且 key 存在，先清空列表
+            if existing_type == "list" {
+                let _: () = con
+                    .del(key)
+                    .await
+                    .map_err(|e| format!("Failed to clear list: {}", e))?;
+            }
+            
+            // 使用 RPUSH 批量添加
+            if !items.is_empty() {
+                let mut cmd = redis::cmd("RPUSH");
+                cmd.arg(key);
+                for item in &items {
+                    cmd.arg(item);
+                }
+                let _: () = cmd
+                    .query_async(&mut con)
+                    .await
+                    .map_err(|e| format!("Failed to push list items: {}", e))?;
+            }
+        }
+        "set" => {
+            let items: Vec<String> =
+                serde_json::from_str(value).map_err(|e| format!("Invalid set JSON: {}", e))?;
+            
+            // 如果类型相同且 key 存在，使用 SADD 更新
+            if existing_type == "set" {
+                // 先删除旧集合
+                let _: () = con
+                    .del(key)
+                    .await
+                    .map_err(|e| format!("Failed to clear set: {}", e))?;
+            }
+            
+            // 使用 SADD 批量添加
+            if !items.is_empty() {
+                let mut cmd = redis::cmd("SADD");
+                cmd.arg(key);
+                for item in &items {
+                    cmd.arg(item);
+                }
+                let _: () = cmd
+                    .query_async(&mut con)
+                    .await
+                    .map_err(|e| format!("Failed to add set members: {}", e))?;
+            }
+        }
+        "zset" => {
+            let items: Vec<(String, f64)> =
+                serde_json::from_str(value).map_err(|e| format!("Invalid zset JSON: {}", e))?;
+            
+            // 如果类型相同且 key 存在，先清空
+            if existing_type == "zset" {
+                let _: () = con
+                    .del(key)
+                    .await
+                    .map_err(|e| format!("Failed to clear zset: {}", e))?;
+            }
+            
+            // 使用 ZADD 批量添加
+            if !items.is_empty() {
+                let mut cmd = redis::cmd("ZADD");
+                cmd.arg(key);
+                for (member, score) in &items {
+                    cmd.arg(score).arg(member);
+                }
+                let _: () = cmd
+                    .query_async(&mut con)
+                    .await
+                    .map_err(|e| format!("Failed to add zset members: {}", e))?;
+            }
+        }
+        _ => return Err(format!("Unsupported key type: {}", key_type)),
+    }
+
+    // 设置 TTL
+    if let Some(ttl_secs) = ttl {
+        if ttl_secs > 0 {
+            let _: () = con
+                .expire(key, ttl_secs)
+                .await
+                .map_err(|e| format!("Failed to set TTL: {}", e))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// 设置 key 的 TTL
+pub async fn set_ttl(connection_id: &str, key: &str, ttl: i64) -> Result<(), String> {
+    ensure_connection_writable(connection_id).await?;
+    let (mut con, _db_index) = get_connection_for_db(connection_id).await?;
+
+    if ttl > 0 {
+        let _: () = con
+            .expire(key, ttl)
+            .await
+            .map_err(|e| format!("Failed to set TTL: {}", e))?;
+    } else if ttl == -1 {
+        // 移除 TTL，设为永久
+        let _: () = con
+            .persist(key)
+            .await
+            .map_err(|e| format!("Failed to persist key: {}", e))?;
+    }
+
+    Ok(())
+}
+
+/// 重命名 key
+pub async fn rename_key(connection_id: &str, old_key: &str, new_key: &str) -> Result<(), String> {
+    ensure_connection_writable(connection_id).await?;
+    let (mut con, _db_index) = get_connection_for_db(connection_id).await?;
+
+    let _: () = con
+        .rename(old_key, new_key)
+        .await
+        .map_err(|e| format!("Failed to rename key: {}", e))?;
+
+    Ok(())
+}
+
+/// 导出 Redis 键到文件
+pub async fn export_key(
+    connection_id: &str,
+    key: &str,
+    format: &str,
+    output_path: &str,
+) -> Result<ExportResult, String> {
+    let (mut con, _db_index) = get_connection_for_db(connection_id).await?;
+
+    // 获取键类型
+    let key_type: String = redis::cmd("TYPE")
+        .arg(key)
+        .query_async(&mut con)
+        .await
+        .map_err(|e| format!("Failed to get key type: {}", e))?;
+
+    if key_type == "none" {
+        return Err(format!("Key '{}' does not exist", key));
+    }
+
+    // 获取键的值
+    let value = get_value(connection_id, key).await?;
+
+    // 根据格式写入文件
+    match format {
+        "json" => {
+            use std::fs::File;
+            use std::io::Write;
+            
+            let export_data = serde_json::json!({
+                "key": key,
+                "type": key_type,
+                "value": value,
+            });
+            
+            let json_content = serde_json::to_string_pretty(&export_data)
+                .map_err(|e| format!("Failed to serialize JSON: {}", e))?;
+            
+            let mut file = File::create(output_path)
+                .map_err(|e| format!("Failed to create file: {}", e))?;
+            file.write_all(json_content.as_bytes())
+                .map_err(|e| format!("Failed to write file: {}", e))?;
+        }
+        "txt" => {
+            use std::fs::File;
+            use std::io::Write;
+            
+            let content = format!("Key: {}\nType: {}\nValue:\n{}\n", key, key_type, value);
+            
+            let mut file = File::create(output_path)
+                .map_err(|e| format!("Failed to create file: {}", e))?;
+            file.write_all(content.as_bytes())
+                .map_err(|e| format!("Failed to write file: {}", e))?;
+        }
+        _ => return Err(format!("Unsupported export format: {}", format)),
+    }
+
+    Ok(ExportResult {
+        success: true,
+        message: format!("Successfully exported key '{}'", key),
+        file_path: output_path.to_string(),
+        exported_rows: 1,
+        exported_tables: 1,
+    })
+}
+
+/// 导入数据到 Redis
+pub async fn import_data(
+    connection_id: &str,
+    file_path: &str,
+    format: &str,
+) -> Result<ImportResult, String> {
+    use std::fs;
+    
+    let (mut con, _db_index) = get_connection_for_db(connection_id).await?;
+
+    // 读取文件内容
+    let file_content = fs::read_to_string(file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    let mut imported_keys = 0u64;
+    let mut imported_values = 0u64;
+
+    match format {
+        "json" => {
+            // JSON 格式：数组，每个元素包含 key, type, value
+            let data: Vec<serde_json::Value> = serde_json::from_str(&file_content)
+                .map_err(|e| format!("Invalid JSON format: {}", e))?;
+
+            for item in data {
+                let key = item.get("key")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing 'key' field in JSON")?;
+                
+                let key_type = item.get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("string");
+                
+                let value = item.get("value")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing 'value' field in JSON")?;
+
+                // 导入键值对
+                match key_type {
+                    "string" => {
+                        let _: () = con.set(key, value)
+                            .await
+                            .map_err(|e| format!("Failed to set string: {}", e))?;
+                    }
+                    "hash" => {
+                        let hash_map: std::collections::HashMap<String, String> =
+                            serde_json::from_str(value)
+                                .map_err(|e| format!("Invalid hash JSON: {}", e))?;
+                        for (field, val) in hash_map {
+                            let _: () = con.hset(key, field, val)
+                                .await
+                                .map_err(|e| format!("Failed to set hash field: {}", e))?;
+                            imported_values += 1;
+                        }
+                    }
+                    "list" => {
+                        let items: Vec<String> = serde_json::from_str(value)
+                            .map_err(|e| format!("Invalid list JSON: {}", e))?;
+                        for item in items {
+                            let _: () = con.rpush(key, item)
+                                .await
+                                .map_err(|e| format!("Failed to push list item: {}", e))?;
+                            imported_values += 1;
+                        }
+                    }
+                    "set" => {
+                        let items: Vec<String> = serde_json::from_str(value)
+                            .map_err(|e| format!("Invalid set JSON: {}", e))?;
+                        for item in items {
+                            let _: () = con.sadd(key, item)
+                                .await
+                                .map_err(|e| format!("Failed to add set member: {}", e))?;
+                            imported_values += 1;
+                        }
+                    }
+                    "zset" => {
+                        let items: Vec<(String, f64)> = serde_json::from_str(value)
+                            .map_err(|e| format!("Invalid zset JSON: {}", e))?;
+                        for (member, score) in items {
+                            let _: () = con.zadd(key, score, member)
+                                .await
+                                .map_err(|e| format!("Failed to add zset member: {}", e))?;
+                            imported_values += 1;
+                        }
+                    }
+                    _ => continue,
+                }
+                imported_keys += 1;
+            }
+        }
+        "txt" => {
+            // TXT 格式：每行一个 key=value
+            for line in file_content.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+
+                if let Some(eq_pos) = line.find('=') {
+                    let key = line[..eq_pos].trim();
+                    let value = line[eq_pos + 1..].trim();
+                    
+                    if !key.is_empty() {
+                        let _: () = con.set(key, value)
+                            .await
+                            .map_err(|e| format!("Failed to set key '{}': {}", key, e))?;
+                        imported_keys += 1;
+                        imported_values += 1;
+                    }
+                }
+            }
+        }
+        _ => return Err(format!("Unsupported import format: {}", format)),
+    }
+
+    Ok(ImportResult {
+        success: true,
+        message: format!("Successfully imported {} keys", imported_keys),
+        imported_rows: imported_values,
+        imported_tables: imported_keys,
+        errors: vec![],
+    })
 }

@@ -4,7 +4,13 @@ import { useConnectionStore } from '@/stores/connectionStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -50,17 +56,20 @@ const inferPasswordStorage = (connection?: DatabaseConnection): PasswordStorageS
     return connection.passwordStorage;
   }
 
-  if (connection.hasPassword && !connection.password?.trim()) {
-    return 'system';
+  // 如果有本地密码，使用 'local'
+  if (connection.password?.trim()) {
+    return 'local';
   }
 
+  // 默认使用 'local'
   return 'local';
 };
 
 export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
   const { addConnection, updateConnection, deleteConnection } = useConnectionStore();
   const initialPasswordStorage = inferPasswordStorage(initialData);
-  const initialPassword = initialPasswordStorage === 'local' ? initialData?.password || '' : '';
+  // 如果有本地密码，显示出来；否则留空让用户重新输入
+  const initialPassword = initialData?.password?.trim() ? initialData.password : '';
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testMessage, setTestMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -142,7 +151,11 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      if (initialData?.id && useStoredSecret && errorMessage.includes('系统钥匙串中没有找到该连接的已保存密码')) {
+      if (
+        initialData?.id &&
+        useStoredSecret &&
+        errorMessage.includes('系统钥匙串中没有找到该连接的已保存密码')
+      ) {
         updateConnection(initialData.id, { hasPassword: false });
       }
       setTestStatus('error');
@@ -161,9 +174,11 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
     const hasTypedPassword = rawPassword.trim() !== '';
     const isSystemStorage = formData.passwordStorage === 'system';
     const hadSystemPassword = initialPasswordStorage === 'system' && !!initialData?.hasPassword;
+
+    // 对于本地存储：如果有输入密码，或者之前没有密码但现在输入了，则保存密码
     const nextHasPassword = isSystemStorage
-      ? (hasTypedPassword || (!!initialData?.hasPassword && !clearStoredPassword))
-      : hasTypedPassword;
+      ? hasTypedPassword || (!!initialData?.hasPassword && !clearStoredPassword)
+      : hasTypedPassword || (!!initialData?.password && !hasTypedPassword);
 
     if (!isSystemStorage && hadSystemPassword && !hasTypedPassword && !clearStoredPassword) {
       setTestStatus('error');
@@ -178,7 +193,10 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
         ...formData,
         host: formData.host.trim(),
         username: formData.username.trim() === '' ? undefined : formData.username.trim(),
-        password: isSystemStorage ? undefined : (hasTypedPassword ? rawPassword : undefined),
+        // 本地存储时，如果有输入密码或之前有密码，保留/保存密码
+        password: isSystemStorage
+          ? undefined
+          : (hasTypedPassword ? rawPassword : initialData?.password),
         hasPassword: nextHasPassword,
         database: formData.database.trim() === '' ? undefined : formData.database.trim(),
       };
@@ -223,7 +241,7 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
   };
 
   const handleTypeChange = (type: 'mysql' | 'redis') => {
-    setFormData((prev) => ({
+    setFormData(prev => ({
       ...prev,
       type,
       port: type === 'redis' ? 6379 : 3306,
@@ -231,7 +249,7 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
   };
 
   const handlePasswordStorageChange = (value: PasswordStorageStrategy) => {
-    setFormData((prev) => ({ ...prev, passwordStorage: value }));
+    setFormData(prev => ({ ...prev, passwordStorage: value }));
     setClearStoredPassword(false);
   };
 
@@ -268,7 +286,11 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
               </DialogDescription>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <div className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
-                  {formData.passwordStorage === 'local' ? <HardDrive className="h-3 w-3" /> : <KeyRound className="h-3 w-3" />}
+                  {formData.passwordStorage === 'local' ? (
+                    <HardDrive className="h-3 w-3" />
+                  ) : (
+                    <KeyRound className="h-3 w-3" />
+                  )}
                   <span>{formData.passwordStorage === 'local' ? '本地保存' : '系统钥匙串'}</span>
                 </div>
                 {formData.readOnly && (
@@ -284,277 +306,331 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col bg-background">
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <div className="mx-auto max-w-[620px] space-y-3">
-            <section className="rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)]">
-              <div className="mb-2.5">
-                <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">连接类型</h3>
-              </div>
-              <div className="grid gap-2.5 sm:grid-cols-2">
-            {(['mysql', 'redis'] as const).map((type) => {
-              const isSelected = formData.type === type;
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => handleTypeChange(type)}
-                  className={cn(
-                    'flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2.5 text-[14px] font-semibold transition-all',
-                    isSelected
-                      ? type === 'mysql'
-                        ? 'border-mysql/35 bg-mysql/8 text-mysql shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]'
-                        : 'border-redis/35 bg-redis/8 text-redis shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]'
-                      : 'border-border/80 bg-background text-muted-foreground hover:bg-muted/35'
-                  )}
-                >
-                  {type === 'mysql' ? <Database className="h-4 w-4" /> : <Server className="h-4 w-4" />}
-                  {type.toUpperCase()}
-                </button>
-              );
-            })}
-              </div>
-            </section>
-
-            <section className="rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)]">
-              <div className="mb-2.5">
-                <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">基础信息</h3>
-              </div>
-              <div className="space-y-3">
-                <div className="max-w-[440px] space-y-2">
-                  <Label className="text-[13px] font-medium">连接名称</Label>
-                  <Input
-                    placeholder="例如：生产环境"
-                    value={formData.name}
-                    onChange={(e) => {
-                      setFormData({ ...formData, name: e.target.value });
-                      if (formErrors.name) setFormErrors({ ...formErrors, name: undefined });
-                    }}
-                    className={cn('h-10 rounded-lg border-border/80 bg-background px-3 text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]', formErrors.name && 'border-destructive')}
-                  />
-                  {formErrors.name && <p className="text-xs text-destructive">{formErrors.name}</p>}
+            <div className="mx-auto max-w-[620px] space-y-3">
+              <section className="rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)]">
+                <div className="mb-2.5">
+                  <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">
+                    连接类型
+                  </h3>
                 </div>
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  {(['mysql', 'redis'] as const).map(type => {
+                    const isSelected = formData.type === type;
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => handleTypeChange(type)}
+                        className={cn(
+                          'flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2.5 text-[14px] font-semibold transition-all',
+                          isSelected
+                            ? type === 'mysql'
+                              ? 'border-mysql/35 bg-mysql/8 text-mysql shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]'
+                              : 'border-redis/35 bg-redis/8 text-redis shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]'
+                            : 'border-border/80 bg-background text-muted-foreground hover:bg-muted/35'
+                        )}
+                      >
+                        {type === 'mysql' ? (
+                          <Database className="h-4 w-4" />
+                        ) : (
+                          <Server className="h-4 w-4" />
+                        )}
+                        {type.toUpperCase()}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
 
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_128px]">
-                  <div className="space-y-2">
-                    <Label className="text-[13px] font-medium">主机</Label>
+              <section className="rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)]">
+                <div className="mb-2.5">
+                  <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">
+                    基础信息
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  <div className="max-w-[440px] space-y-2">
+                    <Label className="text-[13px] font-medium">连接名称</Label>
                     <Input
-                placeholder="localhost"
-                value={formData.host}
-                onChange={(e) => {
-                  setFormData({ ...formData, host: e.target.value });
-                  if (formErrors.host) setFormErrors({ ...formErrors, host: undefined });
-                }}
-                    className={cn('h-10 rounded-lg border-border/80 bg-background px-3 font-mono text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]', formErrors.host && 'border-destructive')}
-                  />
-                    {formErrors.host && <p className="text-xs text-destructive">{formErrors.host}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[13px] font-medium">端口</Label>
-                    <Input
-                      type="number"
-                      value={formData.port}
-                      onChange={(e) => {
-                        setFormData({ ...formData, port: parseInt(e.target.value, 10) || 0 });
-                        if (formErrors.port) setFormErrors({ ...formErrors, port: undefined });
+                      placeholder="例如：生产环境"
+                      value={formData.name}
+                      onChange={e => {
+                        setFormData({ ...formData, name: e.target.value });
+                        if (formErrors.name) setFormErrors({ ...formErrors, name: undefined });
                       }}
-                      className={cn('h-10 rounded-lg border-border/80 bg-background px-3 font-mono text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]', formErrors.port && 'border-destructive')}
+                      className={cn(
+                        'h-10 rounded-lg border-border/80 bg-background px-3 text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]',
+                        formErrors.name && 'border-destructive'
+                      )}
                     />
-                    {formErrors.port && <p className="text-xs text-destructive">{formErrors.port}</p>}
+                    {formErrors.name && (
+                      <p className="text-xs text-destructive">{formErrors.name}</p>
+                    )}
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_128px]">
+                    <div className="space-y-2">
+                      <Label className="text-[13px] font-medium">主机</Label>
+                      <Input
+                        placeholder="localhost"
+                        value={formData.host}
+                        onChange={e => {
+                          setFormData({ ...formData, host: e.target.value });
+                          if (formErrors.host) setFormErrors({ ...formErrors, host: undefined });
+                        }}
+                        className={cn(
+                          'h-10 rounded-lg border-border/80 bg-background px-3 font-mono text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]',
+                          formErrors.host && 'border-destructive'
+                        )}
+                      />
+                      {formErrors.host && (
+                        <p className="text-xs text-destructive">{formErrors.host}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[13px] font-medium">端口</Label>
+                      <Input
+                        type="number"
+                        value={formData.port}
+                        onChange={e => {
+                          setFormData({ ...formData, port: parseInt(e.target.value, 10) || 0 });
+                          if (formErrors.port) setFormErrors({ ...formErrors, port: undefined });
+                        }}
+                        className={cn(
+                          'h-10 rounded-lg border-border/80 bg-background px-3 font-mono text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]',
+                          formErrors.port && 'border-destructive'
+                        )}
+                      />
+                      {formErrors.port && (
+                        <p className="text-xs text-destructive">{formErrors.port}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </section>
+              </section>
 
-            <section className="rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)]">
-              <div className="mb-2.5">
-                <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">密码存储策略</h3>
-              </div>
-              <div className="max-w-[320px] space-y-2">
-                <Select value={formData.passwordStorage} onValueChange={(value) => handlePasswordStorageChange(value as PasswordStorageStrategy)}>
-                  <SelectTrigger className="h-10 rounded-lg border-border/80 bg-background px-3 text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]">
-                    <SelectValue placeholder="选择密码保存策略" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="local">本地配置</SelectItem>
-                    <SelectItem value="system">系统钥匙串</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </section>
-
-          {formData.type === 'mysql' && (
-            <section className="space-y-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)] animate-fade-in">
-              <div>
-                <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">认证与数据库</h3>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                <div className="max-w-[280px] space-y-2">
-                  <Label className="text-[13px] font-medium">用户名</Label>
-                  <Input
-                    placeholder="root"
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    className="h-10 rounded-lg border-border/80 bg-background px-3 text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]"
-                  />
+              <section className="rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)]">
+                <div className="mb-2.5">
+                  <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">
+                    密码存储策略
+                  </h3>
                 </div>
                 <div className="max-w-[320px] space-y-2">
-                  <Label className="text-[13px] font-medium">密码</Label>
-                  <div className="relative">
-                    <Input
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder={
-                        formData.passwordStorage === 'system'
-                          ? (useStoredSecret ? '留空则继续使用系统钥匙串中的密码' : '输入后将写入系统钥匙串')
-                          : '默认保存在本地连接配置'
-                      }
-                      value={formData.password}
-                      onChange={(e) => {
-                        setFormData({ ...formData, password: e.target.value });
-                        if (e.target.value.trim()) {
-                          setClearStoredPassword(false);
-                        }
-                      }}
-                      className="h-10 rounded-lg border-border/80 bg-background px-3 pr-10 text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  {formData.passwordStorage === 'system' && (
-                    <p className="text-[11px] leading-5 text-muted-foreground">
-                      留空则继续使用已保存密码。
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="max-w-[440px] space-y-2">
-                <Label className="text-[13px] font-medium">数据库</Label>
-                <Input
-                  placeholder="database_name"
-                  value={formData.database}
-                  onChange={(e) => setFormData({ ...formData, database: e.target.value })}
-                  className="h-10 rounded-lg border-border/80 bg-background px-3 text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]"
-                />
-              </div>
-            </section>
-          )}
-
-          {formData.type === 'redis' && (
-            <section className="space-y-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)] animate-fade-in">
-              <div>
-                <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">认证信息</h3>
-              </div>
-              <div className="max-w-[320px] space-y-2">
-              <Label className="text-[13px] font-medium">密码（可选）</Label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder={
-                    formData.passwordStorage === 'system'
-                      ? (useStoredSecret ? '留空则继续使用系统钥匙串中的密码' : '输入后将写入系统钥匙串')
-                      : '默认保存在本地连接配置'
-                  }
-                  value={formData.password}
-                  onChange={(e) => {
-                    setFormData({ ...formData, password: e.target.value });
-                    if (e.target.value.trim()) {
-                      setClearStoredPassword(false);
+                  <Select
+                    value={formData.passwordStorage}
+                    onValueChange={value =>
+                      handlePasswordStorageChange(value as PasswordStorageStrategy)
                     }
-                  }}
-                  className="h-10 rounded-lg border-border/80 bg-background px-3 pr-10 text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              {formData.passwordStorage === 'system' && (
-                <p className="text-[11px] leading-5 text-muted-foreground">
-                  留空则继续使用已保存密码。
-                </p>
-              )}
-              </div>
-            </section>
-          )}
-
-          {hasSystemPassword && (
-            <section className="rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)]">
-              <div className="mb-2.5">
-                <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">密码存储</h3>
-              </div>
-            <div className="rounded-lg border border-border/70 bg-muted/[0.16] px-3.5 py-2.5 text-xs text-muted-foreground">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Lock className="h-3.5 w-3.5" />
-                  <span>{storedPasswordStateLabel}</span>
+                  >
+                    <SelectTrigger className="h-10 rounded-lg border-border/80 bg-background px-3 text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]">
+                      <SelectValue placeholder="选择密码保存策略" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="local">本地配置</SelectItem>
+                      <SelectItem value="system">系统钥匙串</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 rounded-lg px-2.5 text-xs"
-                  onClick={() => {
-                    setClearStoredPassword((prev) => !prev);
-                    setFormData((prev) => ({ ...prev, password: '' }));
-                  }}
-                >
-                  {clearStoredPassword ? '保留密码' : '移除密码'}
-                </Button>
-              </div>
-            </div>
-            </section>
-          )}
+              </section>
 
-            <section className="rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)]">
-              <div className="mb-2.5">
-                <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">高级选项</h3>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-muted/[0.14] px-3.5 py-3">
+              {formData.type === 'mysql' && (
+                <section className="space-y-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)] animate-fade-in">
                   <div>
-                    <Label className="flex cursor-pointer items-center gap-2 text-[14px] font-medium">
-                      <Shield className="h-4 w-4 text-muted-foreground" />
-                      SSL 加密连接
-                    </Label>
+                    <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">
+                      认证与数据库
+                    </h3>
                   </div>
-                  <Switch
-                    checked={formData.ssl}
-                    onCheckedChange={(checked) => setFormData({ ...formData, ssl: checked })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-muted/[0.14] px-3.5 py-3">
-                  <div>
-                    <Label className="text-[14px] font-medium">只读连接</Label>
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                    <div className="max-w-[280px] space-y-2">
+                      <Label className="text-[13px] font-medium">用户名</Label>
+                      <Input
+                        placeholder="root"
+                        value={formData.username}
+                        onChange={e => setFormData({ ...formData, username: e.target.value })}
+                        className="h-10 rounded-lg border-border/80 bg-background px-3 text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]"
+                      />
+                    </div>
+                    <div className="max-w-[320px] space-y-2">
+                      <Label className="text-[13px] font-medium">密码</Label>
+                      <div className="relative">
+                        <Input
+                          type={showPassword ? 'text' : 'password'}
+                          placeholder={
+                            formData.passwordStorage === 'system'
+                              ? useStoredSecret
+                                ? '留空则继续使用系统钥匙串中的密码'
+                                : '输入后将写入系统钥匙串'
+                              : '默认保存在本地连接配置'
+                          }
+                          value={formData.password}
+                          onChange={e => {
+                            setFormData({ ...formData, password: e.target.value });
+                            if (e.target.value.trim()) {
+                              setClearStoredPassword(false);
+                            }
+                          }}
+                          className="h-10 rounded-lg border-border/80 bg-background px-3 pr-10 text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                      {formData.passwordStorage === 'system' && (
+                        <p className="text-[11px] leading-5 text-muted-foreground">
+                          留空则继续使用已保存密码。
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <Switch
-                    checked={formData.readOnly}
-                    onCheckedChange={(checked) => setFormData({ ...formData, readOnly: checked })}
-                  />
-                </div>
-              </div>
-            </section>
-
-          {(testStatus === 'success' || testStatus === 'error') && (
-            <div
-              className={cn(
-                'flex items-start gap-3 rounded-xl border px-4 py-3 text-sm',
-                testStatus === 'success'
-                  ? 'border-green-200 bg-green-50 text-green-700'
-                  : 'border-red-200 bg-red-50 text-red-700'
+                  <div className="max-w-[440px] space-y-2">
+                    <Label className="text-[13px] font-medium">数据库</Label>
+                    <Input
+                      placeholder="database_name"
+                      value={formData.database}
+                      onChange={e => setFormData({ ...formData, database: e.target.value })}
+                      className="h-10 rounded-lg border-border/80 bg-background px-3 text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]"
+                    />
+                  </div>
+                </section>
               )}
-            >
-              {testStatus === 'success' ? <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" /> : <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />}
-              <span className="leading-6">{testMessage}</span>
+
+              {formData.type === 'redis' && (
+                <section className="space-y-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)] animate-fade-in">
+                  <div>
+                    <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">
+                      认证信息
+                    </h3>
+                  </div>
+                  <div className="max-w-[320px] space-y-2">
+                    <Label className="text-[13px] font-medium">密码（可选）</Label>
+                    <div className="relative">
+                      <Input
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder={
+                          formData.passwordStorage === 'system'
+                            ? useStoredSecret
+                              ? '留空则继续使用系统钥匙串中的密码'
+                              : '输入后将写入系统钥匙串'
+                            : '默认保存在本地连接配置'
+                        }
+                        value={formData.password}
+                        onChange={e => {
+                          setFormData({ ...formData, password: e.target.value });
+                          if (e.target.value.trim()) {
+                            setClearStoredPassword(false);
+                          }
+                        }}
+                        className="h-10 rounded-lg border-border/80 bg-background px-3 pr-10 text-[14px] shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                    {formData.passwordStorage === 'system' && (
+                      <p className="text-[11px] leading-5 text-muted-foreground">
+                        留空则继续使用已保存密码。
+                      </p>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {hasSystemPassword && (
+                <section className="rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)]">
+                  <div className="mb-2.5">
+                    <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">
+                      密码存储
+                    </h3>
+                  </div>
+                  <div className="rounded-lg border border-border/70 bg-muted/[0.16] px-3.5 py-2.5 text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Lock className="h-3.5 w-3.5" />
+                        <span>{storedPasswordStateLabel}</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 rounded-lg px-2.5 text-xs"
+                        onClick={() => {
+                          setClearStoredPassword(prev => !prev);
+                          setFormData(prev => ({ ...prev, password: '' }));
+                        }}
+                      >
+                        {clearStoredPassword ? '保留密码' : '移除密码'}
+                      </Button>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              <section className="rounded-xl border border-border/80 bg-card p-3.5 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.28)]">
+                <div className="mb-2.5">
+                  <h3 className="text-[13px] font-semibold tracking-[0.02em] text-foreground">
+                    高级选项
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-muted/[0.14] px-3.5 py-3">
+                    <div>
+                      <Label className="flex cursor-pointer items-center gap-2 text-[14px] font-medium">
+                        <Shield className="h-4 w-4 text-muted-foreground" />
+                        SSL 加密连接
+                      </Label>
+                    </div>
+                    <Switch
+                      checked={formData.ssl}
+                      onCheckedChange={checked => setFormData({ ...formData, ssl: checked })}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-muted/[0.14] px-3.5 py-3">
+                    <div>
+                      <Label className="text-[14px] font-medium">只读连接</Label>
+                    </div>
+                    <Switch
+                      checked={formData.readOnly}
+                      onCheckedChange={checked => setFormData({ ...formData, readOnly: checked })}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {(testStatus === 'success' || testStatus === 'error') && (
+                <div
+                  className={cn(
+                    'flex items-start gap-3 rounded-xl border px-4 py-3 text-sm',
+                    testStatus === 'success'
+                      ? 'border-green-200 bg-green-50 text-green-700'
+                      : 'border-red-200 bg-red-50 text-red-700'
+                  )}
+                >
+                  {testStatus === 'success' ? (
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  ) : (
+                    <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  )}
+                  <span className="leading-6">{testMessage}</span>
+                </div>
+              )}
             </div>
-          )}
-          </div>
           </div>
           <div className="border-t border-border/80 bg-muted/[0.08] px-5 py-3.5 shadow-[0_-1px_0_rgba(255,255,255,0.7)]">
             <div className="mx-auto flex max-w-[640px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -589,7 +665,9 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
                   type="submit"
                   className={cn(
                     'h-9 min-w-[116px] rounded-lg px-4.5 shadow-[0_8px_18px_-10px_rgba(37,99,235,0.55)]',
-                    formData.type === 'mysql' ? 'bg-mysql hover:bg-mysql/90' : 'bg-redis hover:bg-redis/90'
+                    formData.type === 'mysql'
+                      ? 'bg-mysql hover:bg-mysql/90'
+                      : 'bg-redis hover:bg-redis/90'
                   )}
                   disabled={isSavingSecret}
                 >

@@ -58,7 +58,10 @@ export async function connectRedis(connection: DatabaseConnection): Promise<Conn
   return invoke<ConnectionResult>('connect_redis', { connection });
 }
 
-export async function saveConnectionPassword(connectionId: string, password: string): Promise<void> {
+export async function saveConnectionPassword(
+  connectionId: string,
+  password: string
+): Promise<void> {
   return invoke<void>('save_connection_password', { connectionId, password });
 }
 
@@ -76,6 +79,21 @@ export async function disconnectRedis(connectionId: string): Promise<void> {
 
 export async function getMySQLDatabases(connectionId: string): Promise<string[]> {
   return invoke<string[]>('get_mysql_databases', { connectionId });
+}
+
+export async function createMySQLDatabase(
+  connectionId: string,
+  databaseName: string,
+  options?: { charset?: string | null; collation?: string | null }
+): Promise<void> {
+  const charset = options?.charset?.trim();
+  const collation = options?.collation?.trim();
+  return invoke<void>('create_mysql_database', {
+    connectionId,
+    databaseName,
+    charset: charset && charset.length > 0 ? charset : null,
+    collation: collation && collation.length > 0 ? collation : null,
+  });
 }
 
 export async function getMySQLTableData(
@@ -108,7 +126,10 @@ export async function getMySQLTables(connectionId: string, database?: string): P
   return invoke<any[]>('get_mysql_tables', { connectionId, database: database ?? null });
 }
 
-export async function getMySQLColumns(connectionId: string, tableName: string): Promise<MySQLColumn[]> {
+export async function getMySQLColumns(
+  connectionId: string,
+  tableName: string
+): Promise<MySQLColumn[]> {
   return invoke<MySQLColumn[]>('get_mysql_columns', { connectionId, tableName });
 }
 
@@ -226,4 +247,84 @@ export async function deleteRedisKey(connectionId: string, key: string): Promise
 
 export async function getRedisInfo(connectionId: string): Promise<RedisInfo> {
   return invoke<RedisInfo>('get_redis_info', { connectionId });
+}
+
+export async function setRedisKey(
+  connectionId: string,
+  key: string,
+  value: string,
+  keyType: string,
+  ttl?: number
+): Promise<void> {
+  return invoke<void>('set_redis_key', { connectionId, key, value, keyType, ttl });
+}
+
+export async function setRedisKeyTTL(
+  connectionId: string,
+  key: string,
+  ttl: number
+): Promise<void> {
+  return invoke<void>('set_redis_key_ttl', { connectionId, key, ttl });
+}
+
+export async function renameRedisKey(
+  connectionId: string,
+  oldKey: string,
+  newKey: string
+): Promise<void> {
+  return invoke<void>('rename_redis_key', { connectionId, oldKey, newKey });
+}
+
+export async function exportRedisKey(
+  connectionId: string,
+  key: string,
+  format: 'json' | 'txt',
+  outputPath: string
+): Promise<ExportResult> {
+  return invoke<ExportResult>('export_redis_key', { connectionId, key, format, outputPath });
+}
+
+export interface ExportResult {
+  success: boolean;
+  message: string;
+  filePath: string;
+  exportedRows: number;
+  exportedTables: number;
+}
+
+export interface ImportOptions {
+  connectionId: string;
+  database: string;
+  filePath: string;
+  format: 'json' | 'sql' | 'csv';
+  tableMapping: Array<{
+    sourceTable: string;
+    targetTable: string;
+    columnMappings: Array<{
+      sourceColumn: string;
+      targetColumn: string;
+    }>;
+  }>;
+  onConflict: 'ignore' | 'replace' | 'error';
+}
+
+export interface ImportResult {
+  success: boolean;
+  message: string;
+  importedRows: number;
+  importedTables: number;
+}
+
+export async function importMySQLData(options: ImportOptions): Promise<ImportResult> {
+  return invoke<ImportResult>('import_mysql_data', { options });
+}
+
+export interface ImportRedisDataOptions {
+  connectionId: string;
+  filePath: string;
+  format: 'json' | 'txt';
+}
+
+export async function importRedisData(options: ImportRedisDataOptions): Promise<ImportResult> {
+  return invoke<ImportResult>('import_redis_data', { options });
 }

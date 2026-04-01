@@ -4,27 +4,57 @@ import { useQueryStore, QueryHistoryItem } from '@/stores/queryStore';
 import { MySQLTable, MySQLColumn, TableData, MySQLRoutine } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { SqlEditor } from '@/components/SqlEditor';
 import {
-  Play, RefreshCw, Clock, Download, History, Plus, X, FileCode,
-  ChevronUp, ChevronDown, Copy, Trash2, Database, Loader2, AlertCircle
+  Play,
+  RefreshCw,
+  Clock,
+  Download,
+  History,
+  Plus,
+  X,
+  FileCode,
+  ChevronUp,
+  ChevronDown,
+  Copy,
+  Trash2,
+  Database,
+  FolderPlus,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { logError } from '@/utils/errorHandler';
 import {
   executeMySQLQuery,
   getMySQLTables,
   getMySQLColumns,
   getMySQLRoutines,
   getMySQLDatabases,
-  setMySQLDefaultDatabase
+  setMySQLDefaultDatabase,
 } from '@/utils/api';
+import { CreateDatabaseDialog } from '@/components/CreateDatabaseDialog';
 
 export function SqlQueryPanel() {
   const { activeConnection, selectedDatabase, setSelectedDatabase } = useConnectionStore();
+  const isReadOnly = !!activeConnection.connection?.readOnly;
   const {
     tabs,
     activeTabId,
@@ -34,7 +64,7 @@ export function SqlQueryPanel() {
     setActiveTabId,
     updateTab,
     addToHistory,
-    clearHistory
+    clearHistory,
   } = useQueryStore();
 
   const [showHistory, setShowHistory] = useState(false);
@@ -45,6 +75,7 @@ export function SqlQueryPanel() {
   const [routines, setRoutines] = useState<MySQLRoutine[]>([]);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [showCreateDatabase, setShowCreateDatabase] = useState(false);
 
   const loadingRef = useRef(false);
   const currentDatabase = selectedDatabase || activeConnection.connection?.database || null;
@@ -62,7 +93,7 @@ export function SqlQueryPanel() {
         setSelectedDatabase(dbs[0]);
       }
     } catch (error) {
-      console.error('Failed to load databases for SQL panel:', error);
+      logError('SQL Panel - Load Databases', error);
       setDatabases([]);
     } finally {
       setLoadingDatabases(false);
@@ -85,7 +116,7 @@ export function SqlQueryPanel() {
 
       const [tablesData, routinesData] = await Promise.all([
         getMySQLTables(connectionId, currentDatabase),
-        getMySQLRoutines(connectionId)
+        getMySQLRoutines(connectionId),
       ]);
       setTables(tablesData);
       setRoutines(routinesData);
@@ -96,12 +127,12 @@ export function SqlQueryPanel() {
           const cols = await getMySQLColumns(connectionId, table.name);
           columnsMap.set(table.name, cols);
         } catch (e) {
-          console.error(`Failed to load columns for ${table.name}:`, e);
+          logError('SQL Panel - Load Table Columns', e, { tableName: table.name });
         }
       }
       setTableColumns(columnsMap);
     } catch (error) {
-      console.error('Failed to load schema:', error);
+      logError('SQL Panel - Load Schema', error);
     }
   }, [activeConnection.connection?.id, currentDatabase]);
 
@@ -122,7 +153,13 @@ export function SqlQueryPanel() {
   }, [tabs, activeTabId]);
 
   const executeQuery = useCallback(async () => {
-    if (!activeConnection.connection?.id || !activeTab || !activeTab.query.trim() || loadingRef.current) return;
+    if (
+      !activeConnection.connection?.id ||
+      !activeTab ||
+      !activeTab.query.trim() ||
+      loadingRef.current
+    )
+      return;
 
     loadingRef.current = true;
     updateTab(activeTab.id, { isExecuting: true, error: null });
@@ -132,29 +169,26 @@ export function SqlQueryPanel() {
         await setMySQLDefaultDatabase(activeConnection.connection.id, currentDatabase);
       }
 
-      const result = await executeMySQLQuery(
-        activeConnection.connection.id,
-        activeTab.query
-      );
+      const result = await executeMySQLQuery(activeConnection.connection.id, activeTab.query);
 
       const tableData: TableData = {
         columns: result.columns,
         rows: result.rows,
         totalCount: result.rows.length,
         executionTime: result.executionTime,
-        affectedRows: result.affectedRows
+        affectedRows: result.affectedRows,
       };
 
       updateTab(activeTab.id, {
         result: tableData,
-        isExecuting: false
+        isExecuting: false,
       });
 
       const historyItem: QueryHistoryItem = {
         query: activeTab.query,
         timestamp: Date.now(),
         executionTime: result.executionTime,
-        rowCount: result.rows.length
+        rowCount: result.rows.length,
       };
 
       addToHistory(historyItem);
@@ -165,27 +199,30 @@ export function SqlQueryPanel() {
       updateTab(activeTab.id, {
         error: errorMsg,
         isExecuting: false,
-        result: null
+        result: null,
       });
     } finally {
       loadingRef.current = false;
     }
   }, [activeConnection.connection?.id, activeTab, updateTab, addToHistory, currentDatabase]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault();
-      executeQuery();
-    }
-    if ((e.metaKey || e.ctrlKey) && e.key === 't') {
-      e.preventDefault();
-      addTab();
-    }
-    if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
-      e.preventDefault();
-      if (activeTab) closeTab(activeTab.id);
-    }
-  }, [executeQuery, addTab, closeTab, activeTab]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        executeQuery();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 't') {
+        e.preventDefault();
+        addTab();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+        e.preventDefault();
+        if (activeTab) closeTab(activeTab.id);
+      }
+    },
+    [executeQuery, addTab, closeTab, activeTab]
+  );
 
   const sortedRows = useMemo(() => {
     if (!activeTab?.result?.rows || !sortColumn) return activeTab?.result?.rows || [];
@@ -208,65 +245,99 @@ export function SqlQueryPanel() {
     });
   }, [activeTab?.result?.rows, sortColumn, sortDirection]);
 
-  const handleSort = useCallback((column: string) => {
-    if (sortColumn === column) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortColumn(column);
-      setSortDirection('asc');
+  const handleSort = useCallback(
+    (column: string) => {
+      if (sortColumn === column) {
+        setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+      } else {
+        setSortColumn(column);
+        setSortDirection('asc');
+      }
+    },
+    [sortColumn]
+  );
+
+  const exportResults = useCallback(
+    (format: 'csv' | 'json') => {
+      if (!activeTab?.result) return;
+
+      const result = activeTab.result;
+      let content: string;
+      let filename: string;
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+
+      if (format === 'json') {
+        content = JSON.stringify(result.rows, null, 2);
+        filename = `query_result_${timestamp}.json`;
+      } else {
+        const headers = result.columns.join(',');
+        const rows = result.rows.map(row =>
+          result.columns
+            .map(col => {
+              const val = row[col];
+              if (val === null || val === undefined) return '';
+              const str = String(val);
+              return str.includes(',') || str.includes('"') || str.includes('\n')
+                ? `"${str.replace(/"/g, '""')}"`
+                : str;
+            })
+            .join(',')
+        );
+        content = [headers, ...rows].join('\n');
+        filename = `query_result_${timestamp}.csv`;
+      }
+
+      const blob = new Blob([content], {
+        type: format === 'json' ? 'application/json' : 'text/csv',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    [activeTab?.result]
+  );
+
+  const copyToClipboard = useCallback(async (text: string) => {
+    try {
+      // 尝试使用现代剪贴板 API
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // 回退到旧的 execCommand 方法
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '0';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+    } catch (error) {
+      console.error('复制失败:', error);
+      alert('复制失败，请手动复制');
     }
-  }, [sortColumn]);
-
-  const exportResults = useCallback((format: 'csv' | 'json') => {
-    if (!activeTab?.result) return;
-
-    const result = activeTab.result;
-    let content: string;
-    let filename: string;
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
-
-    if (format === 'json') {
-      content = JSON.stringify(result.rows, null, 2);
-      filename = `query_result_${timestamp}.json`;
-    } else {
-      const headers = result.columns.join(',');
-      const rows = result.rows.map(row =>
-        result.columns.map(col => {
-          const val = row[col];
-          if (val === null || val === undefined) return '';
-          const str = String(val);
-          return str.includes(',') || str.includes('"') || str.includes('\n')
-            ? `"${str.replace(/"/g, '""')}"`
-            : str;
-        }).join(',')
-      );
-      content = [headers, ...rows].join('\n');
-      filename = `query_result_${timestamp}.csv`;
-    }
-
-    const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [activeTab?.result]);
-
-  const copyToClipboard = useCallback((text: string) => {
-    navigator.clipboard.writeText(text);
   }, []);
 
-  const useHistoryItem = useCallback((query: string) => {
-    if (activeTab) {
-      updateTab(activeTab.id, { query });
-    }
-    setShowHistory(false);
-  }, [activeTab, updateTab]);
+  const useHistoryItem = useCallback(
+    (query: string) => {
+      if (activeTab) {
+        updateTab(activeTab.id, { query });
+      }
+      setShowHistory(false);
+    },
+    [activeTab, updateTab]
+  );
 
   const hasResultSet = !!activeTab?.result && activeTab.result.columns.length > 0;
   const resultTitle = hasResultSet ? '查询结果' : '执行结果';
-  const resultDescription = hasResultSet ? '支持表头排序与结果导出' : '语句已执行，当前操作没有返回结果集';
+  const resultDescription = hasResultSet
+    ? '支持表头排序与结果导出'
+    : '语句已执行，当前操作没有返回结果集';
   const hasExecutionFeedback = !!activeTab?.result || !!activeTab?.error;
   const editorMinHeightClass = hasExecutionFeedback ? 'min-h-[160px]' : 'min-h-[260px]';
   const editorHeight = hasExecutionFeedback ? '160px' : '240px';
@@ -280,7 +351,9 @@ export function SqlQueryPanel() {
             <Database className="h-20 w-20 mx-auto text-mysql/50 relative" />
           </div>
           <h3 className="text-lg font-semibold text-muted-foreground mb-2">等待连接</h3>
-          <p className="text-sm text-muted-foreground/70">请先连接 MySQL 数据库以使用 SQL 查询功能</p>
+          <p className="text-sm text-muted-foreground/70">
+            请先连接 MySQL 数据库以使用 SQL 查询功能
+          </p>
         </div>
       </div>
     );
@@ -328,12 +401,7 @@ export function SqlQueryPanel() {
                   </Badge>
                 )}
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={loadSchema}
-                className="h-7 text-xs"
-              >
+              <Button variant="ghost" size="sm" onClick={loadSchema} className="h-7 text-xs">
                 <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
                 刷新结构
               </Button>
@@ -347,25 +415,25 @@ export function SqlQueryPanel() {
                   <div
                     key={tab.id}
                     className={cn(
-                      "group flex items-center gap-1.5 px-3 py-2 rounded-full text-xs cursor-pointer transition-all border",
+                      'group flex items-center gap-1.5 px-3 py-2 rounded-full text-xs cursor-pointer transition-all border',
                       activeTabId === tab.id
-                        ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                        : "bg-background/80 border-border/60 text-muted-foreground hover:text-foreground hover:border-border"
+                        ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                        : 'bg-background/80 border-border/60 text-muted-foreground hover:text-foreground hover:border-border'
                     )}
                     onClick={() => setActiveTabId(tab.id)}
                   >
                     <span className="max-w-[110px] truncate font-medium">{tab.name}</span>
                     {tabs.length > 1 && (
                       <button
-                        onClick={(e) => {
+                        onClick={e => {
                           e.stopPropagation();
                           closeTab(tab.id);
                         }}
                         className={cn(
-                          "p-0.5 rounded-full transition-colors",
+                          'p-0.5 rounded-full transition-colors',
                           activeTabId === tab.id
-                            ? "hover:bg-primary-foreground/20"
-                            : "hover:bg-muted"
+                            ? 'hover:bg-primary-foreground/20'
+                            : 'hover:bg-muted'
                         )}
                       >
                         <X className="h-3 w-3" />
@@ -390,23 +458,42 @@ export function SqlQueryPanel() {
             <div className="flex items-end justify-between gap-3 flex-wrap">
               <div className="flex items-end gap-3 flex-wrap">
                 <div className="space-y-1.5">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">数据库</p>
-                  <Select
-                    value={currentDatabase || undefined}
-                    onValueChange={setSelectedDatabase}
-                    disabled={loadingDatabases || databases.length === 0}
-                  >
-                    <SelectTrigger className="h-9 min-w-[220px] text-sm bg-background">
-                      <SelectValue placeholder={loadingDatabases ? '加载数据库...' : '选择数据库'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {databases.map((database) => (
-                        <SelectItem key={database} value={database}>
-                          {database}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                    数据库
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <Select
+                      value={currentDatabase || undefined}
+                      onValueChange={setSelectedDatabase}
+                      disabled={loadingDatabases || databases.length === 0}
+                    >
+                      <SelectTrigger className="h-9 min-w-[220px] text-sm bg-background">
+                        <SelectValue
+                          placeholder={loadingDatabases ? '加载数据库...' : '选择数据库'}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {databases.map(database => (
+                          <SelectItem key={database} value={database}>
+                            {database}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      title="新建数据库"
+                      disabled={
+                        isReadOnly || loadingDatabases || !activeConnection.connection?.id
+                      }
+                      onClick={() => setShowCreateDatabase(true)}
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap pb-0.5">
@@ -442,14 +529,12 @@ export function SqlQueryPanel() {
                   <div className="h-2.5 w-2.5 rounded-full bg-primary/80" />
                   当前语句
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  自动补全已启用
-                </span>
+                <span className="text-xs text-muted-foreground">自动补全已启用</span>
               </div>
               <div className="p-2.5">
                 <SqlEditor
                   value={activeTab?.query || ''}
-                  onChange={(value) => updateTab(activeTab.id, { query: value })}
+                  onChange={value => updateTab(activeTab.id, { query: value })}
                   onExecute={executeQuery}
                   tables={tables}
                   tableColumns={tableColumns}
@@ -471,7 +556,12 @@ export function SqlQueryPanel() {
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm">查询历史</CardTitle>
               {globalHistory.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearHistory} className="h-7 text-xs text-destructive">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearHistory}
+                  className="h-7 text-xs text-destructive"
+                >
                   <Trash2 className="h-3 w-3 mr-1" />
                   清空
                 </Button>
@@ -493,20 +583,20 @@ export function SqlQueryPanel() {
                       onClick={() => useHistoryItem(item.query)}
                     >
                       <div className="flex-1 min-w-0">
-                        <code className="text-xs font-mono line-clamp-2 break-all">{item.query}</code>
+                        <code className="text-xs font-mono line-clamp-2 break-all">
+                          {item.query}
+                        </code>
                         <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
                           <span>{new Date(item.timestamp).toLocaleString()}</span>
                           <span>{item.executionTime.toFixed(3)}s</span>
-                          {item.rowCount !== undefined && (
-                            <span>{item.rowCount} 行</span>
-                          )}
+                          {item.rowCount !== undefined && <span>{item.rowCount} 行</span>}
                         </div>
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-6 w-6 flex-shrink-0"
-                        onClick={(e) => {
+                        onClick={e => {
                           e.stopPropagation();
                           copyToClipboard(item.query);
                         }}
@@ -529,7 +619,9 @@ export function SqlQueryPanel() {
               <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-destructive">查询执行失败</p>
-                <p className="text-xs text-muted-foreground mt-1 font-mono break-all">{activeTab.error}</p>
+                <p className="text-xs text-muted-foreground mt-1 font-mono break-all">
+                  {activeTab.error}
+                </p>
               </div>
               <Button
                 variant="ghost"
@@ -554,9 +646,7 @@ export function SqlQueryPanel() {
                 </div>
                 <div>
                   <CardTitle className="text-sm font-semibold">{resultTitle}</CardTitle>
-                  <p className="text-[11px] text-muted-foreground">
-                    {resultDescription}
-                  </p>
+                  <p className="text-[11px] text-muted-foreground">{resultDescription}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
@@ -626,13 +716,12 @@ export function SqlQueryPanel() {
                           >
                             <div className="flex items-center gap-1">
                               <span>{col}</span>
-                              {sortColumn === col && (
-                                sortDirection === 'asc' ? (
+                              {sortColumn === col &&
+                                (sortDirection === 'asc' ? (
                                   <ChevronUp className="h-3 w-3" />
                                 ) : (
                                   <ChevronDown className="h-3 w-3" />
-                                )
-                              )}
+                                ))}
                             </div>
                           </TableHead>
                         ))}
@@ -643,7 +732,10 @@ export function SqlQueryPanel() {
                         <TableRow key={idx} className="hover:bg-muted/30 transition-colors">
                           {activeTab.result!.columns.map(col => (
                             <TableCell key={col} className="text-sm font-mono max-w-[300px]">
-                              <div className="truncate" title={row[col] !== null ? String(row[col]) : 'NULL'}>
+                              <div
+                                className="truncate"
+                                title={row[col] !== null ? String(row[col]) : 'NULL'}
+                              >
                                 {row[col] === null ? (
                                   <span className="text-muted-foreground italic">NULL</span>
                                 ) : typeof row[col] === 'object' ? (
@@ -674,6 +766,15 @@ export function SqlQueryPanel() {
           </div>
         </div>
       )}
+
+      <CreateDatabaseDialog
+        open={showCreateDatabase}
+        onOpenChange={setShowCreateDatabase}
+        onSuccess={dbName => {
+          void loadDatabases();
+          setSelectedDatabase(dbName);
+        }}
+      />
     </div>
   );
 }

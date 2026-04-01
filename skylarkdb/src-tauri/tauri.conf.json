@@ -16,13 +16,17 @@
     "windows": [
       {
         "fullscreen": false,
-        "height": 800,
+        "height": 900,
         "resizable": true,
         "title": "SkylarkDB",
-        "width": 1200,
-        "minWidth": 1024,
-        "minHeight": 720,
-        "center": true
+        "width": 1400,
+        "minWidth": 1100,
+        "minHeight": 750,
+        "center": true,
+        "decorations": true,
+        "transparent": false,
+        "shadow": true,
+        "titleBarStyle": "Overlay"
       }
     ]
   },

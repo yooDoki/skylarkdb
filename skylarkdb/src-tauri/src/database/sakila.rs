@@ -158,10 +158,29 @@ fn init_sakila_database(options: &SakilaInitOptions) -> Result<(), String> {
         .map_err(|e| format!("Failed to write data: {}", e))?;
 
     // Copy SQL files to Docker container
+    let schema_str = schema_path
+        .to_str()
+        .ok_or_else(|| "Invalid schema path (non-UTF8)".to_string())?;
+    let data_str = data_path
+        .to_str()
+        .ok_or_else(|| "Invalid data path (non-UTF8)".to_string())?;
+
     let copy_schema = Command::new("docker")
         .args(&[
             "cp",
-            schema_path.to_str().unwrap(),
+            schema_str,
+            &format!("{}:/tmp/", options.docker_container_name),
+        ])
+        .output();
+
+    if let Err(e) = copy_schema {
+        return Err(format!("Failed to copy schema to container: {}", e));
+    }
+
+    let _copy_data = Command::new("docker")
+        .args(&[
+            "cp",
+            data_str,
             &format!("{}:/tmp/", options.docker_container_name),
         ])
         .output();
@@ -173,7 +192,7 @@ fn init_sakila_database(options: &SakilaInitOptions) -> Result<(), String> {
     let copy_data = Command::new("docker")
         .args(&[
             "cp",
-            data_path.to_str().unwrap(),
+            data_str,
             &format!("{}:/tmp/", options.docker_container_name),
         ])
         .output();

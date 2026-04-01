@@ -4,21 +4,72 @@ import { MySQLColumn, MySQLTable, TableData } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
-  Database, Table2, Search, RefreshCw, ChevronRight, ChevronDown,
-  ChevronLeft, ChevronsLeft, ChevronsRight, ArrowLeft, Loader2, Folder, FolderOpen,
-  Plus, Trash2, KeyRound, Pencil, Save, X, AlertTriangle
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Database,
+  Table2,
+  Search,
+  RefreshCw,
+  ChevronRight,
+  ChevronDown,
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
+  ArrowLeft,
+  Loader2,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  Plus,
+  Trash2,
+  KeyRound,
+  Pencil,
+  Save,
+  X,
+  AlertTriangle,
+  Upload,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import { getMySQLColumns, getMySQLTableData, getMySQLTables, getMySQLDatabases, setMySQLDefaultDatabase, updateMySQLRecord, dropMySQLColumn, insertMySQLRecord, deleteMySQLRecord } from '@/utils/api';
+import {
+  getMySQLColumns,
+  getMySQLTableData,
+  getMySQLTables,
+  getMySQLDatabases,
+  setMySQLDefaultDatabase,
+  updateMySQLRecord,
+  dropMySQLColumn,
+  insertMySQLRecord,
+  deleteMySQLRecord,
+} from '@/utils/api';
 import { CreateTableDialog } from '@/components/CreateTableDialog';
+import { CreateDatabaseDialog } from '@/components/CreateDatabaseDialog';
 import { DeleteTableDialog } from '@/components/DeleteTableDialog';
 import { AddColumnDialog } from '@/components/AddColumnDialog';
+import { ImportDataDialog } from '@/components/ImportDataDialog';
 
 const DEFAULT_PAGE_SIZE = 15;
 const PAGE_SIZE_OPTIONS = [15, 25, 50, 100, 200];
@@ -53,13 +104,21 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
   const [clickTimer, setClickTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [pendingTable, setPendingTable] = useState<string | null>(null);
   const [showCreateTable, setShowCreateTable] = useState(false);
+  const [showCreateDatabase, setShowCreateDatabase] = useState(false);
   const [deleteTableName, setDeleteTableName] = useState<string | null>(null);
   const [showAddColumn, setShowAddColumn] = useState(false);
-  const [dropColumnInfo, setDropColumnInfo] = useState<{ tableName: string; columnName: string } | null>(null);
+  const [showImportData, setShowImportData] = useState(false);
+  const [dropColumnInfo, setDropColumnInfo] = useState<{
+    tableName: string;
+    columnName: string;
+  } | null>(null);
   const [editingRowKey, setEditingRowKey] = useState<string | null>(null);
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
   const [savingRowKey, setSavingRowKey] = useState<string | null>(null);
-  const [editMessage, setEditMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [editMessage, setEditMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
   const [editingFocusColumn, setEditingFocusColumn] = useState<string | null>(null);
   const [showInsertRow, setShowInsertRow] = useState(false);
   const [insertingRow, setInsertingRow] = useState(false);
@@ -73,23 +132,26 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
 
   const CACHE_TIMEOUT = 5 * 60 * 1000;
 
-  const loadDatabases = useCallback(async (connectionId: string) => {
-    setLoadingDatabases(true);
-    try {
-      const dbs = await getMySQLDatabases(connectionId);
-      setDatabases(dbs);
-      if (dbs.length > 0 && !selectedDatabase) {
-        const defaultDb = activeConnection.connection?.database;
-        if (defaultDb && dbs.includes(defaultDb)) {
-          setSelectedDatabase(defaultDb);
+  const loadDatabases = useCallback(
+    async (connectionId: string) => {
+      setLoadingDatabases(true);
+      try {
+        const dbs = await getMySQLDatabases(connectionId);
+        setDatabases(dbs);
+        if (dbs.length > 0 && !selectedDatabase) {
+          const defaultDb = activeConnection.connection?.database;
+          if (defaultDb && dbs.includes(defaultDb)) {
+            setSelectedDatabase(defaultDb);
+          }
         }
+      } catch (error) {
+        console.error('Failed to load databases:', error);
+      } finally {
+        setLoadingDatabases(false);
       }
-    } catch (error) {
-      console.error('Failed to load databases:', error);
-    } finally {
-      setLoadingDatabases(false);
-    }
-  }, [selectedDatabase, activeConnection.connection?.database, setSelectedDatabase]);
+    },
+    [selectedDatabase, activeConnection.connection?.database, setSelectedDatabase]
+  );
 
   const loadTables = useCallback(async (connectionId: string, database: string) => {
     setLoadingTables(true);
@@ -118,7 +180,11 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
   }, [activeConnection.status, activeConnection.connection?.id, loadDatabases]);
 
   useEffect(() => {
-    if (activeConnection.status === 'connected' && selectedDatabase && activeConnection.connection?.id) {
+    if (
+      activeConnection.status === 'connected' &&
+      selectedDatabase &&
+      activeConnection.connection?.id
+    ) {
       loadTables(activeConnection.connection.id, selectedDatabase);
       // Sync selected database to backend for SQL query execution
       setMySQLDefaultDatabase(activeConnection.connection.id, selectedDatabase).catch(err => {
@@ -133,29 +199,32 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     }
   }, [activeConnection.status, selectedDatabase, activeConnection.connection?.id, loadTables]);
 
-  const loadTableColumns = useCallback(async (tableName: string) => {
-    const connectionId = activeConnection.connection?.id;
-    if (!connectionId) return;
-    if (tableColumns.has(tableName)) return;
+  const loadTableColumns = useCallback(
+    async (tableName: string) => {
+      const connectionId = activeConnection.connection?.id;
+      if (!connectionId) return;
+      if (tableColumns.has(tableName)) return;
 
-    setLoadingColumns(prev => new Set(prev).add(tableName));
-    try {
-      const columns = await getMySQLColumns(connectionId, tableName);
-      setTableColumns(prev => {
-        const next = new Map(prev);
-        next.set(tableName, columns);
-        return next;
-      });
-    } catch (error) {
-      console.error(`Failed to load columns for ${tableName}:`, error);
-    } finally {
-      setLoadingColumns(prev => {
-        const next = new Set(prev);
-        next.delete(tableName);
-        return next;
-      });
-    }
-  }, [activeConnection.connection?.id, tableColumns]);
+      setLoadingColumns(prev => new Set(prev).add(tableName));
+      try {
+        const columns = await getMySQLColumns(connectionId, tableName);
+        setTableColumns(prev => {
+          const next = new Map(prev);
+          next.set(tableName, columns);
+          return next;
+        });
+      } catch (error) {
+        console.error(`Failed to load columns for ${tableName}:`, error);
+      } finally {
+        setLoadingColumns(prev => {
+          const next = new Set(prev);
+          next.delete(tableName);
+          return next;
+        });
+      }
+    },
+    [activeConnection.connection?.id, tableColumns]
+  );
 
   const handleCreateSuccess = useCallback(() => {
     if (activeConnection.connection?.id && selectedDatabase) {
@@ -173,55 +242,59 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
       setViewingTable(null);
       setTableData(null);
     }
-  }, [activeConnection.connection?.id, selectedDatabase, loadTables, viewingTable, deleteTableName]);
+  }, [
+    activeConnection.connection?.id,
+    selectedDatabase,
+    loadTables,
+    viewingTable,
+    deleteTableName,
+  ]);
 
-  const loadTableData = useCallback(async (
-    tableName: string,
-    page: number,
-    signal?: AbortSignal,
-    requestedPageSize?: number
-  ) => {
-    if (!activeConnection.connection?.id) return;
+  const loadTableData = useCallback(
+    async (tableName: string, page: number, signal?: AbortSignal, requestedPageSize?: number) => {
+      if (!activeConnection.connection?.id) return;
 
-    const effectivePageSize = requestedPageSize ?? pageSize;
-    const cacheKey = `${tableName}-${page}-${effectivePageSize}`;
-    const cached = tableCache.current.get(cacheKey);
+      const effectivePageSize = requestedPageSize ?? pageSize;
+      const cacheKey = `${tableName}-${page}-${effectivePageSize}`;
+      const cached = tableCache.current.get(cacheKey);
 
-    if (cached && Date.now() - cached.timestamp < CACHE_TIMEOUT) {
-      setTableData(cached.data);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const data = await getMySQLTableData(
-        activeConnection.connection.id,
-        tableName,
-        effectivePageSize,
-        page * effectivePageSize
-      );
-
-      if (!signal?.aborted) {
-        tableCache.current.set(cacheKey, { data, timestamp: Date.now() });
-        setTableData(data);
+      if (cached && Date.now() - cached.timestamp < CACHE_TIMEOUT) {
+        setTableData(cached.data);
+        return;
       }
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') return;
-      console.error('Failed to load table data:', error);
-      if (!signal?.aborted) {
-        setTableData({
-          columns: [],
-          rows: [],
-          totalCount: 0,
-          executionTime: 0,
-        });
+
+      setLoading(true);
+      try {
+        const data = await getMySQLTableData(
+          activeConnection.connection.id,
+          tableName,
+          effectivePageSize,
+          page * effectivePageSize
+        );
+
+        if (!signal?.aborted) {
+          tableCache.current.set(cacheKey, { data, timestamp: Date.now() });
+          setTableData(data);
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') return;
+        console.error('Failed to load table data:', error);
+        if (!signal?.aborted) {
+          setTableData({
+            columns: [],
+            rows: [],
+            totalCount: 0,
+            executionTime: 0,
+          });
+        }
+      } finally {
+        if (!signal?.aborted) {
+          setLoading(false);
+        }
       }
-    } finally {
-      if (!signal?.aborted) {
-        setLoading(false);
-      }
-    }
-  }, [activeConnection.connection?.id, pageSize]);
+    },
+    [activeConnection.connection?.id, pageSize]
+  );
 
   const handleAddColumnSuccess = useCallback(() => {
     if (viewingTable) {
@@ -269,30 +342,37 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     editingRowData.current = null;
   }, [viewingTable, currentPage]);
 
-  const currentTableColumns = useMemo(() => (
-    viewingTable ? tableColumns.get(viewingTable) ?? [] : []
-  ), [tableColumns, viewingTable]);
+  const currentTableColumns = useMemo(
+    () => (viewingTable ? (tableColumns.get(viewingTable) ?? []) : []),
+    [tableColumns, viewingTable]
+  );
 
   const primaryKeyColumns = useMemo(
-    () => currentTableColumns.filter((column) => column.isPrimaryKey),
+    () => currentTableColumns.filter(column => column.isPrimaryKey),
     [currentTableColumns]
   );
 
   const editableColumns = useMemo(
-    () => currentTableColumns.filter((column) => !column.isPrimaryKey && !column.isBlob && !column.isBit && !column.isGeometry),
+    () =>
+      currentTableColumns.filter(
+        column => !column.isPrimaryKey && !column.isBlob && !column.isBit && !column.isGeometry
+      ),
     [currentTableColumns]
   );
 
   const insertableColumns = useMemo(
-    () => currentTableColumns.filter((column) => {
-      const extra = column.extra.toLowerCase();
-      return !column.isBlob && !column.isBit && !column.isGeometry && !extra.includes('generated');
-    }),
+    () =>
+      currentTableColumns.filter(column => {
+        const extra = column.extra.toLowerCase();
+        return (
+          !column.isBlob && !column.isBit && !column.isGeometry && !extra.includes('generated')
+        );
+      }),
     [currentTableColumns]
   );
   const requiredInsertColumnsCount = useMemo(
     () =>
-      insertableColumns.filter((column) => {
+      insertableColumns.filter(column => {
         const extra = column.extra.toLowerCase();
         const isAutoIncrement = extra.includes('auto_increment');
         const hasServerDefault = column.default !== null || extra.includes('default_generated');
@@ -306,24 +386,30 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
   const canInsertRows = !isReadOnly && insertableColumns.length > 0;
   const hasRowActions = canUpdateRows || canDeleteRows;
 
-  const getRowLocator = useCallback((row: TableRow) => {
-    if (primaryKeyColumns.length === 0) return null;
-    const locator: Record<string, unknown> = {};
-    for (const column of primaryKeyColumns) {
-      const value = row[column.name];
-      if (value === undefined) {
-        return null;
+  const getRowLocator = useCallback(
+    (row: TableRow) => {
+      if (primaryKeyColumns.length === 0) return null;
+      const locator: Record<string, unknown> = {};
+      for (const column of primaryKeyColumns) {
+        const value = row[column.name];
+        if (value === undefined) {
+          return null;
+        }
+        locator[column.name] = value;
       }
-      locator[column.name] = value;
-    }
-    return locator;
-  }, [primaryKeyColumns]);
+      return locator;
+    },
+    [primaryKeyColumns]
+  );
 
-  const makeRowKey = useCallback((row: TableRow) => {
-    const locator = getRowLocator(row);
-    if (!locator) return null;
-    return JSON.stringify(locator);
-  }, [getRowLocator]);
+  const makeRowKey = useCallback(
+    (row: TableRow) => {
+      const locator = getRowLocator(row);
+      if (!locator) return null;
+      return JSON.stringify(locator);
+    },
+    [getRowLocator]
+  );
 
   const serializeEditorValue = useCallback((value: unknown) => {
     if (value === null || value === undefined) return 'NULL';
@@ -358,7 +444,8 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     const type = column.type.toLowerCase();
     const integerTypes = new Set(['tinyint', 'smallint', 'mediumint', 'int', 'integer', 'bigint']);
     const decimalTypes = new Set(['decimal', 'numeric', 'float', 'double', 'real']);
-    const boolLike = type === 'boolean' || type === 'bool' || (type === 'tinyint' && column.maxLength === '1');
+    const boolLike =
+      type === 'boolean' || type === 'bool' || (type === 'tinyint' && column.maxLength === '1');
 
     if (boolLike) {
       const boolValue = trimmed.toLowerCase();
@@ -384,21 +471,26 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     return rawValue;
   }, []);
 
-  const startEditingRow = useCallback((row: TableRow, focusColumn?: string) => {
-    const rowKey = makeRowKey(row);
-    if (!rowKey) return;
+  const startEditingRow = useCallback(
+    (row: TableRow, focusColumn?: string) => {
+      const rowKey = makeRowKey(row);
+      if (!rowKey) return;
 
-    const nextValues: Record<string, string> = {};
-    editableColumns.forEach((column) => {
-      nextValues[column.name] = serializeEditorValue(row[column.name]);
-    });
+      const nextValues: Record<string, string> = {};
+      editableColumns.forEach(column => {
+        nextValues[column.name] = serializeEditorValue(row[column.name]);
+      });
 
-    editingRowData.current = row;
-    setEditingRowKey(rowKey);
-    setEditingValues(nextValues);
-    setEditingFocusColumn(focusColumn && editableColumns.some(c => c.name === focusColumn) ? focusColumn : null);
-    setEditMessage(null);
-  }, [editableColumns, makeRowKey, serializeEditorValue]);
+      editingRowData.current = row;
+      setEditingRowKey(rowKey);
+      setEditingValues(nextValues);
+      setEditingFocusColumn(
+        focusColumn && editableColumns.some(c => c.name === focusColumn) ? focusColumn : null
+      );
+      setEditMessage(null);
+    },
+    [editableColumns, makeRowKey, serializeEditorValue]
+  );
 
   const cancelEditingRow = useCallback(() => {
     setEditingRowKey(null);
@@ -410,92 +502,100 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
   }, []);
 
   const handleEditValueChange = useCallback((columnName: string, value: string) => {
-    setEditingValues((prev) => ({ ...prev, [columnName]: value }));
+    setEditingValues(prev => ({ ...prev, [columnName]: value }));
   }, []);
 
   const handleInsertValueChange = useCallback((columnName: string, value: string) => {
-    setInsertValues((prev) => ({ ...prev, [columnName]: value }));
+    setInsertValues(prev => ({ ...prev, [columnName]: value }));
   }, []);
 
-  const saveEditingRow = useCallback(async (row: TableRow) => {
-    if (!activeConnection.connection?.id || !viewingTable) return;
+  const saveEditingRow = useCallback(
+    async (row: TableRow) => {
+      if (!activeConnection.connection?.id || !viewingTable) return;
 
-    const rowKey = makeRowKey(row);
-    if (!rowKey) return;
-    const recordLocator = getRowLocator(row);
-    if (!recordLocator) return;
+      const rowKey = makeRowKey(row);
+      if (!rowKey) return;
+      const recordLocator = getRowLocator(row);
+      if (!recordLocator) return;
 
-    const nextChanges: Record<string, unknown> = {};
+      const nextChanges: Record<string, unknown> = {};
 
-    try {
-      editableColumns.forEach((column) => {
-        const nextValue = parseEditedValue(editingValues[column.name] ?? serializeEditorValue(row[column.name]), column);
-        if (normalizeCompareValue(nextValue) !== normalizeCompareValue(row[column.name])) {
-          nextChanges[column.name] = nextValue;
-        }
-      });
-    } catch (error) {
-      setEditMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : '输入值校验失败',
-      });
-      return;
-    }
+      try {
+        editableColumns.forEach(column => {
+          const nextValue = parseEditedValue(
+            editingValues[column.name] ?? serializeEditorValue(row[column.name]),
+            column
+          );
+          if (normalizeCompareValue(nextValue) !== normalizeCompareValue(row[column.name])) {
+            nextChanges[column.name] = nextValue;
+          }
+        });
+      } catch (error) {
+        setEditMessage({
+          type: 'error',
+          text: error instanceof Error ? error.message : '输入值校验失败',
+        });
+        return;
+      }
 
-    if (Object.keys(nextChanges).length === 0) {
-      setEditingRowKey(null);
-      setEditingValues({});
-      setEditMessage({
-        type: 'success',
-        text: '未检测到变更',
-      });
-      return;
-    }
+      if (Object.keys(nextChanges).length === 0) {
+        setEditingRowKey(null);
+        setEditingValues({});
+        setEditMessage({
+          type: 'success',
+          text: '未检测到变更',
+        });
+        return;
+      }
 
-    setSavingRowKey(rowKey);
-    setEditMessage(null);
+      setSavingRowKey(rowKey);
+      setEditMessage(null);
 
-    try {
-      await updateMySQLRecord(
-        activeConnection.connection.id,
-        viewingTable,
-        nextChanges,
-        recordLocator
-      );
-      tableCache.current.clear();
-      setEditingRowKey(null);
-      setEditingValues({});
-      setEditingFocusColumn(null);
-      editingRowData.current = null;
-      setEditMessage({
-        type: 'success',
-        text: `已保存记录修改（${Object.entries(recordLocator).map(([key, value]) => `${key}=${serializeEditorValue(value)}`).join(', ')}）`,
-      });
+      try {
+        await updateMySQLRecord(
+          activeConnection.connection.id,
+          viewingTable,
+          nextChanges,
+          recordLocator
+        );
+        tableCache.current.clear();
+        setEditingRowKey(null);
+        setEditingValues({});
+        setEditingFocusColumn(null);
+        editingRowData.current = null;
+        setEditMessage({
+          type: 'success',
+          text: `已保存记录修改（${Object.entries(recordLocator)
+            .map(([key, value]) => `${key}=${serializeEditorValue(value)}`)
+            .join(', ')}）`,
+        });
 
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      await loadTableData(viewingTable, currentPage, controller.signal);
-    } catch (error) {
-      setEditMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : '保存失败',
-      });
-    } finally {
-      setSavingRowKey(null);
-    }
-  }, [
-    activeConnection.connection?.id,
-    currentPage,
-    editableColumns,
-    editingValues,
-    getRowLocator,
-    loadTableData,
-    makeRowKey,
-    normalizeCompareValue,
-    parseEditedValue,
-    serializeEditorValue,
-    viewingTable,
-  ]);
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        await loadTableData(viewingTable, currentPage, controller.signal);
+      } catch (error) {
+        setEditMessage({
+          type: 'error',
+          text: error instanceof Error ? error.message : '保存失败',
+        });
+      } finally {
+        setSavingRowKey(null);
+      }
+    },
+    [
+      activeConnection.connection?.id,
+      currentPage,
+      editableColumns,
+      editingValues,
+      getRowLocator,
+      loadTableData,
+      makeRowKey,
+      normalizeCompareValue,
+      parseEditedValue,
+      serializeEditorValue,
+      viewingTable,
+    ]
+  );
 
   const resetInsertDialog = useCallback(() => {
     setShowInsertRow(false);
@@ -508,7 +608,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
 
     const payload: Record<string, unknown> = {};
     try {
-      insertableColumns.forEach((column) => {
+      insertableColumns.forEach(column => {
         const rawValue = insertValues[column.name] ?? '';
         const trimmed = rawValue.trim();
         const extra = column.extra.toLowerCase();
@@ -564,59 +664,62 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     viewingTable,
   ]);
 
-  const handleDeleteRow = useCallback(async (row: TableRow) => {
-    if (!activeConnection.connection?.id || !viewingTable) return;
-    const recordLocator = getRowLocator(row);
-    if (!recordLocator) {
-      setEditMessage({
-        type: 'error',
-        text: '未找到用于删除该记录的主键定位信息',
-      });
-      return;
-    }
-
-    const locatorText = Object.entries(recordLocator)
-      .map(([key, value]) => `${key}=${serializeEditorValue(value)}`)
-      .join(', ');
-    if (!confirm(`确定要删除这条记录吗？\n${locatorText}`)) {
-      return;
-    }
-
-    const rowKey = makeRowKey(row);
-    setSavingRowKey(rowKey);
-    setEditMessage(null);
-    try {
-      await deleteMySQLRecord(activeConnection.connection.id, viewingTable, recordLocator);
-      tableCache.current.clear();
-      if (editingRowKey === rowKey) {
-        cancelEditingRow();
+  const handleDeleteRow = useCallback(
+    async (row: TableRow) => {
+      if (!activeConnection.connection?.id || !viewingTable) return;
+      const recordLocator = getRowLocator(row);
+      if (!recordLocator) {
+        setEditMessage({
+          type: 'error',
+          text: '未找到用于删除该记录的主键定位信息',
+        });
+        return;
       }
-      setEditMessage({
-        type: 'success',
-        text: `已删除记录（${locatorText}）`,
-      });
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      await loadTableData(viewingTable, currentPage, controller.signal);
-    } catch (error) {
-      setEditMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : '删除记录失败',
-      });
-    } finally {
-      setSavingRowKey(null);
-    }
-  }, [
-    activeConnection.connection?.id,
-    cancelEditingRow,
-    currentPage,
-    editingRowKey,
-    getRowLocator,
-    loadTableData,
-    makeRowKey,
-    serializeEditorValue,
-    viewingTable,
-  ]);
+
+      const locatorText = Object.entries(recordLocator)
+        .map(([key, value]) => `${key}=${serializeEditorValue(value)}`)
+        .join(', ');
+      if (!confirm(`确定要删除这条记录吗？\n${locatorText}`)) {
+        return;
+      }
+
+      const rowKey = makeRowKey(row);
+      setSavingRowKey(rowKey);
+      setEditMessage(null);
+      try {
+        await deleteMySQLRecord(activeConnection.connection.id, viewingTable, recordLocator);
+        tableCache.current.clear();
+        if (editingRowKey === rowKey) {
+          cancelEditingRow();
+        }
+        setEditMessage({
+          type: 'success',
+          text: `已删除记录（${locatorText}）`,
+        });
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        await loadTableData(viewingTable, currentPage, controller.signal);
+      } catch (error) {
+        setEditMessage({
+          type: 'error',
+          text: error instanceof Error ? error.message : '删除记录失败',
+        });
+      } finally {
+        setSavingRowKey(null);
+      }
+    },
+    [
+      activeConnection.connection?.id,
+      cancelEditingRow,
+      currentPage,
+      editingRowKey,
+      getRowLocator,
+      loadTableData,
+      makeRowKey,
+      serializeEditorValue,
+      viewingTable,
+    ]
+  );
 
   // Keep ref in sync for keyboard shortcut access
   saveEditingRowRef.current = saveEditingRow;
@@ -686,88 +789,98 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     }
   }, [viewingTable]);
 
-  const handleTableClick = useCallback((tableName: string) => {
-    if (clickTimer) {
-      clearTimeout(clickTimer);
-      setClickTimer(null);
-    }
+  const handleTableClick = useCallback(
+    (tableName: string) => {
+      if (clickTimer) {
+        clearTimeout(clickTimer);
+        setClickTimer(null);
+      }
 
-    const timer = setTimeout(() => {
-      setExpandedTables(prev => {
-        const newSet = new Set(prev);
-        const willExpand = !newSet.has(tableName);
-        if (!willExpand) {
-          newSet.delete(tableName);
-        } else {
-          newSet.add(tableName);
-          if (!tableColumns.has(tableName) && !loadingColumns.has(tableName)) {
-            void loadTableColumns(tableName);
+      const timer = setTimeout(() => {
+        setExpandedTables(prev => {
+          const newSet = new Set(prev);
+          const willExpand = !newSet.has(tableName);
+          if (!willExpand) {
+            newSet.delete(tableName);
+          } else {
+            newSet.add(tableName);
+            if (!tableColumns.has(tableName) && !loadingColumns.has(tableName)) {
+              void loadTableColumns(tableName);
+            }
           }
+          return newSet;
+        });
+        setClickTimer(null);
+      }, 250);
+
+      setClickTimer(timer);
+    },
+    [clickTimer, loadTableColumns, loadingColumns, tableColumns]
+  );
+
+  const handleTableDoubleClick = useCallback(
+    (tableName: string) => {
+      if (clickTimer) {
+        clearTimeout(clickTimer);
+        setClickTimer(null);
+      }
+
+      if (pendingTable) {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
         }
-        return newSet;
-      });
-      setClickTimer(null);
-    }, 250);
+      }
 
-    setClickTimer(timer);
-  }, [clickTimer, loadTableColumns, loadingColumns, tableColumns]);
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
-  const handleTableDoubleClick = useCallback((tableName: string) => {
-    if (clickTimer) {
-      clearTimeout(clickTimer);
-      setClickTimer(null);
-    }
+      setViewingTable(tableName);
+      setPendingTable(tableName);
+      setCurrentPage(0);
+      loadTableData(tableName, 0, controller.signal);
+    },
+    [clickTimer, pendingTable, loadTableData]
+  );
 
-    if (pendingTable) {
+  const handlePageChange = useCallback(
+    (newPage: number) => {
+      if (!viewingTable) return;
+
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-    }
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
-    setViewingTable(tableName);
-    setPendingTable(tableName);
-    setCurrentPage(0);
-    loadTableData(tableName, 0, controller.signal);
-  }, [clickTimer, pendingTable, loadTableData]);
+      setCurrentPage(newPage);
+      loadTableData(viewingTable, newPage, controller.signal);
+    },
+    [viewingTable, loadTableData]
+  );
 
-  const handlePageChange = useCallback((newPage: number) => {
-    if (!viewingTable) return;
+  const handlePageSizeChange = useCallback(
+    (newPageSize: number) => {
+      if (!viewingTable) return;
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
-    setCurrentPage(newPage);
-    loadTableData(viewingTable, newPage, controller.signal);
-  }, [viewingTable, loadTableData]);
-
-  const handlePageSizeChange = useCallback((newPageSize: number) => {
-    if (!viewingTable) return;
-
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    setPageSize(newPageSize);
-    setCurrentPage(0);
-    loadTableData(viewingTable, 0, controller.signal, newPageSize);
-  }, [viewingTable, loadTableData]);
+      setPageSize(newPageSize);
+      setCurrentPage(0);
+      loadTableData(viewingTable, 0, controller.signal, newPageSize);
+    },
+    [viewingTable, loadTableData]
+  );
 
   const filteredTables = useMemo(() => {
     if (!searchTerm.trim()) return tables;
     const term = searchTerm.toLowerCase();
-    return tables.filter(table => 
-      table.name.toLowerCase().includes(term)
-    );
+    return tables.filter(table => table.name.toLowerCase().includes(term));
   }, [tables, searchTerm]);
 
   const totalPages = Math.ceil((tableData?.totalCount || 0) / pageSize);
@@ -784,7 +897,10 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     if (typeof value === 'object') {
       const serializedValue = JSON.stringify(value);
       return (
-        <span className="inline-block min-w-max font-mono text-xs text-foreground/90" title={serializedValue}>
+        <span
+          className="inline-block min-w-max font-mono text-xs text-foreground/90"
+          title={serializedValue}
+        >
           {serializedValue}
         </span>
       );
@@ -792,7 +908,10 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
 
     const strValue = String(value);
     return (
-      <span className="inline-block min-w-max font-mono text-xs text-foreground/90" title={strValue}>
+      <span
+        className="inline-block min-w-max font-mono text-xs text-foreground/90"
+        title={strValue}
+      >
         {strValue}
       </span>
     );
@@ -842,9 +961,21 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                 <Database className="h-4 w-4 text-mysql" />
               </div>
               <CardTitle className="text-sm font-semibold">选择数据库</CardTitle>
-              <Badge variant="secondary" className="ml-auto text-xs shadow-sm">
-                {databases.length}
-              </Badge>
+              <div className="ml-auto flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => setShowCreateDatabase(true)}
+                  disabled={isReadOnly || loadingDatabases}
+                >
+                  <FolderPlus className="h-3.5 w-3.5" />
+                  新建数据库
+                </Button>
+                <Badge variant="secondary" className="text-xs shadow-sm">
+                  {databases.length}
+                </Badge>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -858,7 +989,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                {databases.map((db) => (
+                {databases.map(db => (
                   <button
                     key={db}
                     onClick={() => setSelectedDatabase(db)}
@@ -912,7 +1043,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
             <Input
               placeholder="搜索表..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={e => setSearchTerm(e.target.value)}
               className="h-8 rounded-lg border-border/60 bg-background/80 pl-8 text-xs"
             />
           </div>
@@ -945,10 +1076,12 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
         <div
           ref={tableListRef}
           className="min-h-0 flex-1 overflow-auto px-4 py-4"
-          style={{
-            scrollbarWidth: 'thin',
-            scrollbarColor: 'hsl(var(--muted-foreground) / 0.3) transparent',
-          } as React.CSSProperties}
+          style={
+            {
+              scrollbarWidth: 'thin',
+              scrollbarColor: 'hsl(var(--muted-foreground) / 0.3) transparent',
+            } as React.CSSProperties
+          }
         >
           <div className="space-y-1">
             {loadingTables ? (
@@ -960,20 +1093,17 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                 暂无数据表
               </div>
             ) : (
-              filteredTables.map((table) => (
-                <div
-                  key={`${table.schema}-${table.name}`}
-                  className="transition-all duration-150"
-                >
+              filteredTables.map(table => (
+                <div key={`${table.schema}-${table.name}`} className="transition-all duration-150">
                   <button
                     data-table-name={table.name}
                     onClick={() => handleTableClick(table.name)}
                     onDoubleClick={() => handleTableDoubleClick(table.name)}
                     className={cn(
-                      "group w-full flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-all",
+                      'group w-full flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-all',
                       viewingTable === table.name
-                        ? "border-primary/25 bg-primary/[0.08] text-primary shadow-sm"
-                        : "border-transparent hover:border-border/70 hover:bg-muted/60"
+                        ? 'border-primary/25 bg-primary/[0.08] text-primary shadow-sm'
+                        : 'border-transparent hover:border-border/70 hover:bg-muted/60'
                     )}
                   >
                     {expandedTables.has(table.name) ? (
@@ -981,18 +1111,24 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                     ) : (
                       <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                     )}
-                    <Table2 className={cn(
-                      "h-3.5 w-3.5 flex-shrink-0 transition-colors",
-                      viewingTable === table.name ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
-                    )} />
-                    <span className="text-xs truncate flex-1" title={table.name}>{table.name}</span>
+                    <Table2
+                      className={cn(
+                        'h-3.5 w-3.5 flex-shrink-0 transition-colors',
+                        viewingTable === table.name
+                          ? 'text-primary'
+                          : 'text-muted-foreground group-hover:text-foreground'
+                      )}
+                    />
+                    <span className="text-xs truncate flex-1" title={table.name}>
+                      {table.name}
+                    </span>
                     <Badge
                       variant="outline"
                       className={cn(
-                        "h-5 px-1.5 text-[10px] font-medium",
+                        'h-5 px-1.5 text-[10px] font-medium',
                         viewingTable === table.name
-                          ? "border-primary/20 bg-primary/10 text-primary"
-                          : "border-border/70 bg-background/70 text-muted-foreground"
+                          ? 'border-primary/20 bg-primary/10 text-primary'
+                          : 'border-border/70 bg-background/70 text-muted-foreground'
                       )}
                     >
                       {table.rows}
@@ -1008,7 +1144,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                         </div>
                       ) : (tableColumns.get(table.name)?.length ?? 0) > 0 ? (
                         <div className="space-y-1">
-                          {tableColumns.get(table.name)!.map((column) => (
+                          {tableColumns.get(table.name)!.map(column => (
                             <div
                               key={`${table.name}-${column.name}`}
                               className="group/column flex items-start gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-background/70"
@@ -1024,19 +1160,33 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span className="truncate text-[11px] font-medium text-foreground" title={column.name}>{column.name}</span>
+                                  <span
+                                    className="truncate text-[11px] font-medium text-foreground"
+                                    title={column.name}
+                                  >
+                                    {column.name}
+                                  </span>
                                   {column.isPrimaryKey && (
-                                    <Badge variant="outline" className="h-4 px-1 text-[9px] uppercase border-amber-200 bg-amber-50 text-amber-700">
+                                    <Badge
+                                      variant="outline"
+                                      className="h-4 px-1 text-[9px] uppercase border-amber-200 bg-amber-50 text-amber-700"
+                                    >
                                       PK
                                     </Badge>
                                   )}
                                   {!column.nullable && (
-                                    <Badge variant="outline" className="h-4 px-1 text-[9px] uppercase">
+                                    <Badge
+                                      variant="outline"
+                                      className="h-4 px-1 text-[9px] uppercase"
+                                    >
                                       NN
                                     </Badge>
                                   )}
                                   {column.extra.includes('auto_increment') && (
-                                    <Badge variant="secondary" className="h-4 px-1 text-[9px] uppercase">
+                                    <Badge
+                                      variant="secondary"
+                                      className="h-4 px-1 text-[9px] uppercase"
+                                    >
                                       AI
                                     </Badge>
                                   )}
@@ -1048,9 +1198,12 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                               <button
                                 className="flex-shrink-0 rounded p-0.5 opacity-0 transition-colors group-hover/column:opacity-100 hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
                                 title={`删除列 ${column.name}`}
-                                onClick={(e) => {
+                                onClick={e => {
                                   e.stopPropagation();
-                                  setDropColumnInfo({ tableName: table.name, columnName: column.name });
+                                  setDropColumnInfo({
+                                    tableName: table.name,
+                                    columnName: column.name,
+                                  });
                                 }}
                                 disabled={isReadOnly}
                               >
@@ -1060,9 +1213,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                           ))}
                         </div>
                       ) : (
-                        <div className="px-1 py-2 text-xs text-muted-foreground">
-                          暂无字段信息
-                        </div>
+                        <div className="px-1 py-2 text-xs text-muted-foreground">暂无字段信息</div>
                       )}
                     </div>
                   )}
@@ -1086,7 +1237,9 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                       <Table2 className="h-4 w-4 text-mysql" />
                     </div>
                     <div className="min-w-0">
-                      <CardTitle className="truncate text-sm font-semibold">{viewingTable}</CardTitle>
+                      <CardTitle className="truncate text-sm font-semibold">
+                        {viewingTable}
+                      </CardTitle>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         {tableData && (
                           <>
@@ -1155,6 +1308,16 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                       variant="outline"
                       size="sm"
                       className="h-7"
+                      onClick={() => setShowImportData(true)}
+                      disabled={isReadOnly}
+                    >
+                      <Upload className="h-3 w-3 mr-1" />
+                      导入数据
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7"
                       onClick={() => setShowAddColumn(true)}
                       disabled={isReadOnly}
                     >
@@ -1185,15 +1348,17 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                   </div>
                 ) : (
                   <>
-                    {(editMessage || currentTableColumns.length > 0 || loadingColumns.has(viewingTable)) && (
+                    {(editMessage ||
+                      currentTableColumns.length > 0 ||
+                      loadingColumns.has(viewingTable)) && (
                       <div className="px-6 pt-4">
                         {editMessage && (
                           <div
                             className={cn(
-                              "mb-3 rounded-lg border px-3 py-2 text-xs",
+                              'mb-3 rounded-lg border px-3 py-2 text-xs',
                               editMessage.type === 'success'
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : "border-destructive/30 bg-destructive/5 text-destructive"
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border-destructive/30 bg-destructive/5 text-destructive'
                             )}
                           >
                             {editMessage.text}
@@ -1204,21 +1369,38 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             正在加载列信息...
                           </div>
-                        ) : currentTableColumns.length > 0 && (
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            <Badge variant="outline" className="h-6 px-2.5">
-                              {primaryKeyColumns.length > 0
-                                ? `主键: ${primaryKeyColumns.map((column) => column.name).join(', ')}`
-                                : '未检测到主键'}
-                            </Badge>
-                            {canUpdateRows ? (
-                              <span>双击单元格或点击"编辑"修改，<kbd className="rounded border px-1 font-mono text-[10px]">Tab</kbd> 切换单元格，<kbd className="rounded border px-1 font-mono text-[10px]">Enter</kbd> 保存，<kbd className="rounded border px-1 font-mono text-[10px]">Esc</kbd> 取消，输入 <code className="font-mono text-[10px]">NULL</code> 可置空。</span>
-                            ) : primaryKeyColumns.length > 0 ? (
-                              <span>当前表没有可安全编辑的普通列。</span>
-                            ) : (
-                              <span>当前表没有主键，无法安全定位记录，暂未开放编辑和删除。</span>
-                            )}
-                          </div>
+                        ) : (
+                          currentTableColumns.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <Badge variant="outline" className="h-6 px-2.5">
+                                {primaryKeyColumns.length > 0
+                                  ? `主键: ${primaryKeyColumns.map(column => column.name).join(', ')}`
+                                  : '未检测到主键'}
+                              </Badge>
+                              {canUpdateRows ? (
+                                <span>
+                                  双击单元格或点击"编辑"修改，
+                                  <kbd className="rounded border px-1 font-mono text-[10px]">
+                                    Tab
+                                  </kbd>{' '}
+                                  切换单元格，
+                                  <kbd className="rounded border px-1 font-mono text-[10px]">
+                                    Enter
+                                  </kbd>{' '}
+                                  保存，
+                                  <kbd className="rounded border px-1 font-mono text-[10px]">
+                                    Esc
+                                  </kbd>{' '}
+                                  取消，输入 <code className="font-mono text-[10px]">NULL</code>{' '}
+                                  可置空。
+                                </span>
+                              ) : primaryKeyColumns.length > 0 ? (
+                                <span>当前表没有可安全编辑的普通列。</span>
+                              ) : (
+                                <span>当前表没有主键，无法安全定位记录，暂未开放编辑和删除。</span>
+                              )}
+                            </div>
+                          )
                         )}
                       </div>
                     )}
@@ -1244,21 +1426,43 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                           </TableHeader>
                           <TableBody>
                             {tableData.rows.map((row, rowIdx) => (
-                              <TableRow key={rowIdx} className="odd:bg-muted/[0.18] hover:bg-primary/[0.05]">
+                              <TableRow
+                                key={rowIdx}
+                                className="odd:bg-muted/[0.18] hover:bg-primary/[0.05]"
+                              >
                                 {tableData.columns.map((col, cellIdx) => {
                                   const rowKey = makeRowKey(row);
                                   const isEditingRow = !!rowKey && editingRowKey === rowKey;
-                                  const columnMeta = currentTableColumns.find((column) => column.name === col);
-                                  const canEditCell = isEditingRow && columnMeta && !columnMeta.isPrimaryKey && !columnMeta.isBlob && !columnMeta.isBit && !columnMeta.isGeometry;
-                                  const isDoubleClickEditable = !isEditingRow && canUpdateRows && rowKey && columnMeta && !columnMeta.isPrimaryKey && !columnMeta.isBlob && !columnMeta.isBit && !columnMeta.isGeometry;
+                                  const columnMeta = currentTableColumns.find(
+                                    column => column.name === col
+                                  );
+                                  const canEditCell =
+                                    isEditingRow &&
+                                    columnMeta &&
+                                    !columnMeta.isPrimaryKey &&
+                                    !columnMeta.isBlob &&
+                                    !columnMeta.isBit &&
+                                    !columnMeta.isGeometry;
+                                  const isDoubleClickEditable =
+                                    !isEditingRow &&
+                                    canUpdateRows &&
+                                    rowKey &&
+                                    columnMeta &&
+                                    !columnMeta.isPrimaryKey &&
+                                    !columnMeta.isBlob &&
+                                    !columnMeta.isBit &&
+                                    !columnMeta.isGeometry;
 
-                                  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+                                  const handleInputKeyDown = (
+                                    e: React.KeyboardEvent<HTMLInputElement>
+                                  ) => {
                                     if (e.key === 'Tab') {
                                       e.preventDefault();
                                       const cols = editableColumns.map(c => c.name);
                                       const currentIdx = cols.indexOf(col);
                                       if (e.shiftKey) {
-                                        if (currentIdx > 0) setEditingFocusColumn(cols[currentIdx - 1]);
+                                        if (currentIdx > 0)
+                                          setEditingFocusColumn(cols[currentIdx - 1]);
                                       } else {
                                         if (currentIdx < cols.length - 1) {
                                           setEditingFocusColumn(cols[currentIdx + 1]);
@@ -1280,8 +1484,9 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                     <TableCell
                                       key={cellIdx}
                                       className={cn(
-                                        "min-w-[160px] whitespace-nowrap border-border/40 py-3 text-xs align-top",
-                                        isDoubleClickEditable && "cursor-pointer hover:bg-primary/[0.08] transition-colors"
+                                        'min-w-[160px] whitespace-nowrap border-border/40 py-3 text-xs align-top',
+                                        isDoubleClickEditable &&
+                                          'cursor-pointer hover:bg-primary/[0.08] transition-colors'
                                       )}
                                       onDoubleClick={() => {
                                         if (isDoubleClickEditable) {
@@ -1293,7 +1498,9 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                         <Input
                                           data-edit-col={col}
                                           value={editingValues[col] ?? ''}
-                                          onChange={(event) => handleEditValueChange(col, event.target.value)}
+                                          onChange={event =>
+                                            handleEditValueChange(col, event.target.value)
+                                          }
                                           onKeyDown={handleInputKeyDown}
                                           className="h-8 min-w-[180px] rounded-md border-border/60 bg-background px-2 font-mono text-xs"
                                         />
@@ -1316,7 +1523,9 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                       const isSavingRow = !!rowKey && savingRowKey === rowKey;
 
                                       if (!rowKey) {
-                                        return <span className="text-muted-foreground">不可操作</span>;
+                                        return (
+                                          <span className="text-muted-foreground">不可操作</span>
+                                        );
                                       }
 
                                       return isEditingRow ? (
@@ -1401,19 +1610,20 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                       <div className="flex flex-shrink-0 flex-col gap-3 border-t border-border/60 bg-background/80 px-6 pb-6 pt-4 backdrop-blur supports-[backdrop-filter]:bg-background/70 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex flex-wrap items-center gap-3">
                           <span className="text-xs text-muted-foreground">
-                            第 {currentPage + 1} / {Math.max(1, totalPages)} 页，共 {(tableData.totalCount || 0).toLocaleString()} 条
+                            第 {currentPage + 1} / {Math.max(1, totalPages)} 页，共{' '}
+                            {(tableData.totalCount || 0).toLocaleString()} 条
                           </span>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">每页</span>
                             <Select
                               value={String(pageSize)}
-                              onValueChange={(v) => handlePageSizeChange(Number(v))}
+                              onValueChange={v => handlePageSizeChange(Number(v))}
                             >
                               <SelectTrigger className="h-7 w-[80px] text-xs">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent side="top">
-                                {PAGE_SIZE_OPTIONS.map((size) => (
+                                {PAGE_SIZE_OPTIONS.map(size => (
                                   <SelectItem key={size} value={String(size)}>
                                     {size} 条
                                   </SelectItem>
@@ -1480,6 +1690,17 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
         )}
       </div>
 
+      <CreateDatabaseDialog
+        open={showCreateDatabase}
+        onOpenChange={setShowCreateDatabase}
+        onSuccess={dbName => {
+          if (activeConnection.connection?.id) {
+            void loadDatabases(activeConnection.connection.id);
+            setSelectedDatabase(dbName);
+          }
+        }}
+      />
+
       <CreateTableDialog
         open={showCreateTable}
         onOpenChange={setShowCreateTable}
@@ -1488,7 +1709,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
 
       <Dialog
         open={showInsertRow}
-        onOpenChange={(open) => {
+        onOpenChange={open => {
           if (!open) {
             resetInsertDialog();
             return;
@@ -1503,9 +1724,15 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                 <Plus className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <DialogTitle className="text-2xl font-semibold tracking-tight">新增一行</DialogTitle>
+                <DialogTitle className="text-2xl font-semibold tracking-tight">
+                  新增一行
+                </DialogTitle>
                 <DialogDescription className="mt-2 max-w-3xl text-[15px] leading-7 text-muted-foreground">
-                  留空会优先使用数据库默认值或自增规则；如需显式置空，可输入 <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">NULL</code>。
+                  留空会优先使用数据库默认值或自增规则；如需显式置空，可输入{' '}
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+                    NULL
+                  </code>
+                  。
                 </DialogDescription>
                 <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                   <Badge variant="secondary" className="h-7 rounded-full px-3 font-medium">
@@ -1535,35 +1762,37 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
           </div>
           <div className="max-h-[min(68vh,760px)] overflow-y-auto bg-gradient-to-b from-background to-muted/[0.12] px-8 py-6">
             <div className="grid gap-4 xl:grid-cols-2">
-              {insertableColumns.map((column) => {
+              {insertableColumns.map(column => {
                 const extra = column.extra.toLowerCase();
                 const isAutoIncrement = extra.includes('auto_increment');
-                const hasServerDefault = column.default !== null || extra.includes('default_generated');
+                const hasServerDefault =
+                  column.default !== null || extra.includes('default_generated');
                 const isRequired = !column.nullable && !isAutoIncrement && !hasServerDefault;
                 return (
                   <div
                     key={column.name}
                     className={cn(
-                      "group rounded-2xl border bg-background/90 p-4 shadow-sm transition-all duration-200",
+                      'group rounded-2xl border bg-background/90 p-4 shadow-sm transition-all duration-200',
                       isRequired
-                        ? "border-primary/20 shadow-primary/[0.04] hover:border-primary/30 hover:shadow-md"
-                        : "border-border/70 hover:border-border hover:shadow-md"
+                        ? 'border-primary/20 shadow-primary/[0.04] hover:border-primary/30 hover:shadow-md'
+                        : 'border-border/70 hover:border-border hover:shadow-md'
                     )}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <Label htmlFor={`insert-${column.name}`} className="text-[15px] font-semibold text-foreground">
+                        <Label
+                          htmlFor={`insert-${column.name}`}
+                          className="text-[15px] font-semibold text-foreground"
+                        >
                           {column.name}
                         </Label>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {column.fullType}
-                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">{column.fullType}</p>
                       </div>
                       <Badge
                         variant={isRequired ? 'default' : 'secondary'}
                         className={cn(
-                          "h-7 rounded-full px-3 text-[11px] font-semibold shadow-sm",
-                          !isRequired && "bg-muted text-muted-foreground"
+                          'h-7 rounded-full px-3 text-[11px] font-semibold shadow-sm',
+                          !isRequired && 'bg-muted text-muted-foreground'
                         )}
                       >
                         {isRequired ? '必填' : '可留空'}
@@ -1572,7 +1801,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                     <Input
                       id={`insert-${column.name}`}
                       value={insertValues[column.name] ?? ''}
-                      onChange={(event) => handleInsertValueChange(column.name, event.target.value)}
+                      onChange={event => handleInsertValueChange(column.name, event.target.value)}
                       placeholder={`${column.type}${column.default !== null ? `，默认 ${column.default}` : ''}${isAutoIncrement ? '，自动递增' : ''}`}
                       className="mt-4 h-12 rounded-xl border-border/60 bg-background px-4 font-mono text-sm shadow-inner transition-all focus:border-primary/40 focus:bg-background"
                     />
@@ -1581,12 +1810,8 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                         {column.type}
                       </span>
                       <span>{column.nullable ? '允许 NULL' : '非空约束'}</span>
-                      {column.default !== null && (
-                        <span>默认值: {column.default}</span>
-                      )}
-                      {isAutoIncrement && (
-                        <span>自动递增</span>
-                      )}
+                      {column.default !== null && <span>默认值: {column.default}</span>}
+                      {isAutoIncrement && <span>自动递增</span>}
                     </div>
                   </div>
                 );
@@ -1595,15 +1820,26 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
           </div>
           <DialogFooter className="border-t border-border/60 bg-background/95 px-8 py-5 backdrop-blur">
             <div className="flex w-full items-center justify-between gap-4">
-              <p className="text-xs text-muted-foreground">
-                保存后会立即刷新当前表数据。
-              </p>
+              <p className="text-xs text-muted-foreground">保存后会立即刷新当前表数据。</p>
               <div className="flex items-center gap-3">
-                <Button variant="outline" className="h-11 rounded-xl px-6" disabled={insertingRow} onClick={resetInsertDialog}>
+                <Button
+                  variant="outline"
+                  className="h-11 rounded-xl px-6"
+                  disabled={insertingRow}
+                  onClick={resetInsertDialog}
+                >
                   取消
                 </Button>
-                <Button className="h-11 rounded-xl px-6 shadow-sm" disabled={insertingRow} onClick={() => void saveInsertedRow()}>
-                  {insertingRow ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                <Button
+                  className="h-11 rounded-xl px-6 shadow-sm"
+                  disabled={insertingRow}
+                  onClick={() => void saveInsertedRow()}
+                >
+                  {insertingRow ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="mr-2 h-4 w-4" />
+                  )}
                   保存新行
                 </Button>
               </div>
@@ -1615,7 +1851,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
       {deleteTableName && (
         <DeleteTableDialog
           open={!!deleteTableName}
-          onOpenChange={(open) => !open && setDeleteTableName(null)}
+          onOpenChange={open => !open && setDeleteTableName(null)}
           tableName={deleteTableName}
           onSuccess={handleDeleteSuccess}
         />
@@ -1630,7 +1866,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
       />
 
       {dropColumnInfo && (
-        <Dialog open={!!dropColumnInfo} onOpenChange={(open) => !open && setDropColumnInfo(null)}>
+        <Dialog open={!!dropColumnInfo} onOpenChange={open => !open && setDropColumnInfo(null)}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-destructive">
@@ -1640,21 +1876,35 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
             </DialogHeader>
             <div className="py-4">
               <p className="text-sm text-muted-foreground mb-4">
-                确定要删除表 <span className="font-mono font-medium text-foreground">{dropColumnInfo.tableName}</span> 的列 <span className="font-mono font-medium text-foreground">{dropColumnInfo.columnName}</span> 吗？
+                确定要删除表{' '}
+                <span className="font-mono font-medium text-foreground">
+                  {dropColumnInfo.tableName}
+                </span>{' '}
+                的列{' '}
+                <span className="font-mono font-medium text-foreground">
+                  {dropColumnInfo.columnName}
+                </span>{' '}
+                吗？
               </p>
               <p className="text-xs text-destructive">
                 此操作不可恢复，列中的所有数据都将被永久删除。
               </p>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDropColumnInfo(null)}>取消</Button>
+              <Button variant="outline" onClick={() => setDropColumnInfo(null)}>
+                取消
+              </Button>
               <Button
                 variant="destructive"
                 disabled={isReadOnly}
                 onClick={async () => {
                   if (!activeConnection.connection?.id) return;
                   try {
-                    await dropMySQLColumn(activeConnection.connection.id, dropColumnInfo.tableName, dropColumnInfo.columnName);
+                    await dropMySQLColumn(
+                      activeConnection.connection.id,
+                      dropColumnInfo.tableName,
+                      dropColumnInfo.columnName
+                    );
                     handleDropColumnSuccess();
                   } catch (err) {
                     console.error('Failed to drop column:', err);
@@ -1667,6 +1917,17 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
           </DialogContent>
         </Dialog>
       )}
+
+      <ImportDataDialog
+        open={showImportData}
+        onOpenChange={setShowImportData}
+        onSuccess={() => {
+          tableCache.current.clear();
+          if (viewingTable) {
+            loadTableData(viewingTable, currentPage);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -3,20 +3,57 @@ import { useConnectionStore } from '@/stores/connectionStore';
 import { MySQLColumn, AddColumnOptions } from '@/types';
 import { addMySQLColumn } from '@/utils/api';
 import { cn } from '@/utils/cn';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Loader2, AlertCircle, Database, Code2, Settings2, AlignLeft, AlignRight, ShieldCheck } from 'lucide-react';
+import {
+  Plus,
+  Loader2,
+  AlertCircle,
+  Database,
+  Code2,
+  Settings2,
+  AlignLeft,
+  AlignRight,
+  ShieldCheck,
+} from 'lucide-react';
 
 const MYSQL_TYPES = [
-  'INT', 'BIGINT', 'SMALLINT', 'TINYINT', 'MEDIUMINT',
-  'VARCHAR(255)', 'CHAR(50)', 'TEXT', 'MEDIUMTEXT', 'LONGTEXT',
-  'DECIMAL(10,2)', 'FLOAT', 'DOUBLE',
-  'DATE', 'DATETIME', 'TIMESTAMP', 'TIME', 'YEAR',
+  'INT',
+  'BIGINT',
+  'SMALLINT',
+  'TINYINT',
+  'MEDIUMINT',
+  'VARCHAR(255)',
+  'CHAR(50)',
+  'TEXT',
+  'MEDIUMTEXT',
+  'LONGTEXT',
+  'DECIMAL(10,2)',
+  'FLOAT',
+  'DOUBLE',
+  'DATE',
+  'DATETIME',
+  'TIMESTAMP',
+  'TIME',
+  'YEAR',
   'JSON',
-  'BOOLEAN', 'BIT(1)',
+  'BOOLEAN',
+  'BIT(1)',
 ];
 
 interface AddColumnDialogProps {
@@ -42,7 +79,14 @@ const optionToneClasses: Record<OptionCardProps['tone'], string> = {
   emerald: 'border-emerald-200 bg-emerald-50/80 shadow-emerald-100/60',
 };
 
-function OptionCard({ checked, onCheckedChange, label, description, token, tone }: OptionCardProps) {
+function OptionCard({
+  checked,
+  onCheckedChange,
+  label,
+  description,
+  token,
+  tone,
+}: OptionCardProps) {
   return (
     <div
       className={cn(
@@ -73,7 +117,13 @@ function OptionCard({ checked, onCheckedChange, label, description, token, tone 
   );
 }
 
-export function AddColumnDialog({ open, onOpenChange, tableName, existingColumns, onSuccess }: AddColumnDialogProps) {
+export function AddColumnDialog({
+  open,
+  onOpenChange,
+  tableName,
+  existingColumns,
+  onSuccess,
+}: AddColumnDialogProps) {
   const { activeConnection } = useConnectionStore();
   const isReadOnly = !!activeConnection.connection?.readOnly;
   const [name, setName] = useState('');
@@ -142,10 +192,17 @@ export function AddColumnDialog({ open, onOpenChange, tableName, existingColumns
     !nullable ? 'NOT NULL' : null,
     hasDefault && defaultValue.trim() ? `DEFAULT ${defaultValue.trim()}` : null,
     autoIncrement ? 'AUTO_INCREMENT' : null,
-    position === 'first' ? 'FIRST' : position === 'after' && afterColumn ? `AFTER \`${afterColumn}\`` : null,
-  ].filter(Boolean).join(' ');
+    position === 'first'
+      ? 'FIRST'
+      : position === 'after' && afterColumn
+        ? `AFTER \`${afterColumn}\``
+        : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
-  const positionLabel = position === 'first' ? '表开头' : position === 'after' ? '指定列之后' : '表末尾';
+  const positionLabel =
+    position === 'first' ? '表开头' : position === 'after' ? '指定列之后' : '表末尾';
   const canSubmit = !isReadOnly && !isAdding && !!name.trim();
 
   return (
@@ -215,7 +272,7 @@ export function AddColumnDialog({ open, onOpenChange, tableName, existingColumns
                     </label>
                     <Input
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={e => setName(e.target.value)}
                       placeholder="column_name"
                       className="h-11 rounded-xl border-slate-200 bg-slate-50 px-4 font-mono text-[15px] shadow-sm transition focus-visible:border-slate-400 focus-visible:ring-slate-300"
                     />
@@ -275,7 +332,7 @@ export function AddColumnDialog({ open, onOpenChange, tableName, existingColumns
                 <div className="grid gap-3 md:grid-cols-3">
                   <OptionCard
                     checked={!nullable}
-                    onCheckedChange={(checked) => setNullable(!checked)}
+                    onCheckedChange={checked => setNullable(!checked)}
                     label="非空约束"
                     description="插入时必须提供值。"
                     token="NOT NULL"
@@ -306,7 +363,7 @@ export function AddColumnDialog({ open, onOpenChange, tableName, existingColumns
                     </label>
                     <Input
                       value={defaultValue}
-                      onChange={(e) => setDefaultValue(e.target.value)}
+                      onChange={e => setDefaultValue(e.target.value)}
                       placeholder="例如: NULL, CURRENT_TIMESTAMP, 0, 'text'"
                       className="h-10 rounded-xl border-emerald-200 bg-white font-mono shadow-sm focus-visible:ring-emerald-200"
                     />
@@ -337,7 +394,10 @@ export function AddColumnDialog({ open, onOpenChange, tableName, existingColumns
                 <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
                   <div className="space-y-2.5">
                     <label className="text-sm font-medium text-slate-700">位置策略</label>
-                    <Select value={position} onValueChange={(v) => setPosition(v as 'last' | 'first' | 'after')}>
+                    <Select
+                      value={position}
+                      onValueChange={v => setPosition(v as 'last' | 'first' | 'after')}
+                    >
                       <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-slate-50 px-4 shadow-sm">
                         <SelectValue />
                       </SelectTrigger>
@@ -370,7 +430,9 @@ export function AddColumnDialog({ open, onOpenChange, tableName, existingColumns
                       </Select>
                     ) : (
                       <div className="flex h-11 items-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 text-sm text-slate-500">
-                        {position === 'after' ? '当前表还没有可参考的字段。' : `当前策略：${positionLabel}`}
+                        {position === 'after'
+                          ? '当前表还没有可参考的字段。'
+                          : `当前策略：${positionLabel}`}
                       </div>
                     )}
                   </div>
@@ -394,27 +456,37 @@ export function AddColumnDialog({ open, onOpenChange, tableName, existingColumns
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">目标表</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      目标表
+                    </p>
                     <code className="mt-2 block break-all rounded-xl bg-white px-3 py-2 font-mono text-xs text-slate-700 shadow-sm">
                       {tableName}
                     </code>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">新增字段</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      新增字段
+                    </p>
                     <code className="mt-2 block break-all rounded-xl bg-white px-3 py-2 font-mono text-xs text-slate-700 shadow-sm">
                       {name || 'column_name'}
                     </code>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">类型</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      类型
+                    </p>
                     <code className="mt-2 block rounded-xl bg-white px-3 py-2 font-mono text-xs text-slate-700 shadow-sm">
                       {dataType}
                     </code>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">位置</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      位置
+                    </p>
                     <p className="mt-2 rounded-xl bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm">
-                      {position === 'after' && afterColumn ? `位于 ${afterColumn} 之后` : positionLabel}
+                      {position === 'after' && afterColumn
+                        ? `位于 ${afterColumn} 之后`
+                        : positionLabel}
                     </p>
                   </div>
                 </div>
@@ -447,7 +519,11 @@ export function AddColumnDialog({ open, onOpenChange, tableName, existingColumns
         </div>
 
         <DialogFooter className="border-t border-slate-200 bg-white px-6 py-4">
-          <Button variant="outline" onClick={handleClose} className="h-10 rounded-xl border-slate-200 px-4">
+          <Button
+            variant="outline"
+            onClick={handleClose}
+            className="h-10 rounded-xl border-slate-200 px-4"
+          >
             取消
           </Button>
           <Button
@@ -455,7 +531,11 @@ export function AddColumnDialog({ open, onOpenChange, tableName, existingColumns
             disabled={!canSubmit}
             className="h-10 rounded-xl bg-slate-950 px-5 text-white hover:bg-slate-800"
           >
-            {isAdding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+            {isAdding ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="mr-2 h-4 w-4" />
+            )}
             新增列
           </Button>
         </DialogFooter>

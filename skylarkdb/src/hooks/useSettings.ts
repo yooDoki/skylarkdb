@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { logError } from '@/utils/errorHandler';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -41,7 +42,7 @@ export function useSettings() {
         setSettings({ ...defaultSettings, ...parsed });
       }
     } catch (error) {
-      console.error('Failed to load settings:', error);
+      logError('Settings Hook - Load Settings', error);
     }
     setIsLoaded(true);
   }, []);
@@ -52,15 +53,18 @@ export function useSettings() {
       try {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
       } catch (error) {
-        console.error('Failed to save settings:', error);
+        logError('Settings Hook - Save Settings', error);
       }
     }
   }, [settings, isLoaded]);
 
-  // Apply theme effect
+  // Apply theme effect with smooth transition
   useEffect(() => {
     const applyTheme = () => {
       const { theme } = settings;
+
+      // Add transition class before theme change
+      document.documentElement.classList.add('theme-transition');
 
       if (theme === 'dark') {
         document.documentElement.classList.add('dark');
@@ -74,6 +78,13 @@ export function useSettings() {
           document.documentElement.classList.remove('dark');
         }
       }
+
+      // Remove transition class after animation completes
+      const timeout = setTimeout(() => {
+        document.documentElement.classList.remove('theme-transition');
+      }, 300);
+
+      return () => clearTimeout(timeout);
     };
 
     applyTheme();
@@ -90,12 +101,12 @@ export function useSettings() {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [settings.theme]);
 
-  const updateSetting = useCallback(<K extends keyof SettingsState>(
-    key: K,
-    value: SettingsState[K]
-  ) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
-  }, []);
+  const updateSetting = useCallback(
+    <K extends keyof SettingsState>(key: K, value: SettingsState[K]) => {
+      setSettings(prev => ({ ...prev, [key]: value }));
+    },
+    []
+  );
 
   const resetSettings = useCallback(() => {
     setSettings(defaultSettings);

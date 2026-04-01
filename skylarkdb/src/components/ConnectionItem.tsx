@@ -31,61 +31,86 @@ export const ConnectionItem = memo(function ConnectionItem({
   const [isHovered, setIsHovered] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
-  const handleConnect = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (status !== 'connecting') {
-      onConnect(connection);
-    }
-  }, [connection, onConnect, status]);
+  const handleConnect = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (status !== 'connecting') {
+        onConnect(connection);
+      }
+    },
+    [connection, onConnect, status]
+  );
 
-  const handleDisconnect = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    onDisconnect();
-  }, [onDisconnect]);
+  const handleDisconnect = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onDisconnect();
+    },
+    [onDisconnect]
+  );
 
-  const handleEdit = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    onEdit(connection);
-  }, [connection, onEdit]);
+  const handleEdit = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onEdit(connection);
+    },
+    [connection, onEdit]
+  );
 
-  const handleDelete = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    onDelete(connection.id, e);
-  }, [connection.id, onDelete]);
+  const handleDelete = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onDelete(connection.id, e);
+    },
+    [connection.id, onDelete]
+  );
 
-  const handleDuplicate = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    onDuplicate?.(connection);
-    setShowMenu(false);
-  }, [connection, onDuplicate]);
+  const handleDuplicate = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onDuplicate?.(connection);
+      setShowMenu(false);
+    },
+    [connection, onDuplicate]
+  );
 
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    onContextMenu?.(e, connection);
-  }, [connection, onContextMenu]);
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      onContextMenu?.(e, connection);
+    },
+    [connection, onContextMenu]
+  );
 
-  const handleMenuClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowMenu(!showMenu);
-  }, [showMenu]);
+  const handleMenuClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setShowMenu(!showMenu);
+    },
+    [showMenu]
+  );
 
   const getStatusColor = () => {
     if (!isActive) return 'bg-gray-300';
     switch (status) {
-      case 'connected': return 'bg-emerald-500';
-      case 'connecting': return 'bg-blue-500';
-      case 'error': return 'bg-red-500';
-      default: return 'bg-gray-300';
+      case 'connected':
+        return 'bg-emerald-500';
+      case 'connecting':
+        return 'bg-blue-500';
+      case 'error':
+        return 'bg-red-500';
+      default:
+        return 'bg-gray-300';
     }
   };
 
   return (
     <div
       className={cn(
-        "group relative flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 cursor-pointer",
+        'group relative flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 cursor-pointer',
         isActive
-          ? "border-emerald-500/30 bg-emerald-50/50"
-          : "border-border/50 bg-card hover:border-primary/30 hover:bg-accent/30"
+          ? 'border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-500/15'
+          : 'border-border/50 bg-card hover:border-primary/30 hover:bg-accent/30'
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => {
@@ -95,19 +120,27 @@ export const ConnectionItem = memo(function ConnectionItem({
       onContextMenu={handleContextMenu}
     >
       {/* Status Indicator */}
-      <div className={cn(
-        "w-2.5 h-2.5 rounded-full flex-shrink-0",
-        getStatusColor(),
-        isActive && status === 'connected' && "animate-pulse"
-      )} />
+      <div
+        className={cn(
+          'w-2.5 h-2.5 rounded-full flex-shrink-0',
+          getStatusColor(),
+          isActive && status === 'connected' && 'animate-pulse'
+        )}
+      />
 
       {/* Database Icon */}
-      <div className={cn(
-        "flex-shrink-0 p-2 rounded-lg transition-all duration-200",
-        connection.type === 'mysql'
-          ? isActive ? "bg-mysql/20" : "bg-mysql/10"
-          : isActive ? "bg-redis/20" : "bg-redis/10"
-      )}>
+      <div
+        className={cn(
+          'flex-shrink-0 p-2 rounded-lg transition-all duration-200',
+          connection.type === 'mysql'
+            ? isActive
+              ? 'bg-mysql/20'
+              : 'bg-mysql/10'
+            : isActive
+              ? 'bg-redis/20'
+              : 'bg-redis/10'
+        )}
+      >
         {connection.type === 'mysql' ? (
           <Database className="h-4 w-4 text-mysql" />
         ) : (
@@ -118,10 +151,12 @@ export const ConnectionItem = memo(function ConnectionItem({
       {/* Connection Info */}
       <div className="flex-1 min-w-0 overflow-hidden">
         <div className="flex items-center gap-2">
-          <span className={cn(
-            "font-medium text-sm truncate",
-            isActive ? "text-foreground" : "text-foreground/90"
-          )}>
+          <span
+            className={cn(
+              'font-medium text-sm truncate',
+              isActive ? 'text-foreground' : 'text-foreground/90'
+            )}
+          >
             {connection.name}
           </span>
           {connection.readOnly && (
@@ -129,12 +164,12 @@ export const ConnectionItem = memo(function ConnectionItem({
               只读
             </span>
           )}
-          <span className={cn(
-            "text-[10px] px-1.5 py-0.5 rounded font-medium uppercase flex-shrink-0",
-            connection.type === 'mysql'
-              ? "bg-mysql/10 text-mysql"
-              : "bg-redis/10 text-redis"
-          )}>
+          <span
+            className={cn(
+              'text-[10px] px-1.5 py-0.5 rounded font-medium uppercase flex-shrink-0',
+              connection.type === 'mysql' ? 'bg-mysql/10 text-mysql' : 'bg-redis/10 text-redis'
+            )}
+          >
             {connection.type}
           </span>
         </div>
@@ -146,10 +181,12 @@ export const ConnectionItem = memo(function ConnectionItem({
       </div>
 
       {/* Action Buttons */}
-      <div className={cn(
-        "flex items-center gap-0.5 transition-all duration-200",
-        isHovered || isActive ? "opacity-100" : "opacity-0"
-      )}>
+      <div
+        className={cn(
+          'flex items-center gap-0.5 transition-all duration-200',
+          isHovered || isActive ? 'opacity-100' : 'opacity-0'
+        )}
+      >
         {isActive && status === 'connected' ? (
           <Button
             variant="ghost"
@@ -165,9 +202,9 @@ export const ConnectionItem = memo(function ConnectionItem({
             variant="ghost"
             size="icon"
             className={cn(
-              "h-7 w-7 rounded-md",
-              "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-100",
-              status === 'connecting' && "opacity-50 cursor-not-allowed"
+              'h-7 w-7 rounded-md',
+              'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-100',
+              status === 'connecting' && 'opacity-50 cursor-not-allowed'
             )}
             onClick={handleConnect}
             disabled={status === 'connecting'}

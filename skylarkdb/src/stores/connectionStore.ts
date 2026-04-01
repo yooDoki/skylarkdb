@@ -7,7 +7,9 @@ interface ConnectionStore {
   activeConnection: ConnectionState;
   activeConnectionId: string | null;
   selectedDatabase: string | null;
-  addConnection: (connection: Omit<DatabaseConnection, 'id' | 'createdAt' | 'updatedAt'>) => DatabaseConnection;
+  addConnection: (
+    connection: Omit<DatabaseConnection, 'id' | 'createdAt' | 'updatedAt'>
+  ) => DatabaseConnection;
   updateConnection: (id: string, updates: Partial<DatabaseConnection>) => void;
   deleteConnection: (id: string) => void;
   setActiveConnection: (connection: DatabaseConnection | null) => void;
@@ -15,28 +17,29 @@ interface ConnectionStore {
   setSelectedDatabase: (database: string | null) => void;
 }
 
-const inferPasswordStorage = (connection: DatabaseConnection): 'local' | 'system' => {
+const inferPasswordStorage = (connection: DatabaseConnection): 'local' | 'system' | 'none' => {
   if (connection.passwordStorage) {
     return connection.passwordStorage;
   }
 
-  if (connection.hasPassword && !connection.password?.trim()) {
-    return 'system';
+  // 如果有本地密码，使用 'local'
+  if (connection.password?.trim()) {
+    return 'local';
   }
 
+  // 默认使用 'local'
   return 'local';
 };
 
 const normalizeConnection = (connection: DatabaseConnection): DatabaseConnection => {
   const passwordStorage = inferPasswordStorage(connection);
   const localPassword = connection.password?.trim() ? connection.password : undefined;
-  const hasPassword = passwordStorage === 'system'
-    ? !!connection.hasPassword
-    : !!localPassword;
+  const hasPassword = passwordStorage === 'system' ? !!connection.hasPassword : !!localPassword;
 
   return {
     ...connection,
-    password: passwordStorage === 'local' ? localPassword : undefined,
+    // 始终保留本地密码（如果存在）
+    password: localPassword,
     hasPassword,
     passwordStorage,
     readOnly: connection.readOnly ?? false,
@@ -45,7 +48,7 @@ const normalizeConnection = (connection: DatabaseConnection): DatabaseConnection
 
 export const useConnectionStore = create<ConnectionStore>()(
   persist(
-    (set) => ({
+    set => ({
       connections: [],
       activeConnectionId: null,
       selectedDatabase: null,
@@ -55,22 +58,22 @@ export const useConnectionStore = create<ConnectionStore>()(
         error: null,
       },
 
-      addConnection: (connectionData) => {
+      addConnection: connectionData => {
         const newConnection = normalizeConnection({
           ...connectionData,
           id: crypto.randomUUID(),
           createdAt: Date.now(),
           updatedAt: Date.now(),
         } as DatabaseConnection);
-        set((state) => ({
+        set(state => ({
           connections: [...state.connections, newConnection],
         }));
         return newConnection;
       },
 
       updateConnection: (id, updates) => {
-        set((state) => ({
-          connections: state.connections.map((conn) => {
+        set(state => ({
+          connections: state.connections.map(conn => {
             if (conn.id !== id) {
               return conn;
             }
@@ -91,9 +94,9 @@ export const useConnectionStore = create<ConnectionStore>()(
         }));
       },
 
-      deleteConnection: (id) => {
-        set((state) => ({
-          connections: state.connections.filter((conn) => conn.id !== id),
+      deleteConnection: id => {
+        set(state => ({
+          connections: state.connections.filter(conn => conn.id !== id),
           activeConnectionId:
             state.activeConnection.connection?.id === id ? null : state.activeConnectionId,
           selectedDatabase:
@@ -105,11 +108,10 @@ export const useConnectionStore = create<ConnectionStore>()(
         }));
       },
 
-      setActiveConnection: (connection) => {
+      setActiveConnection: connection => {
         const normalizedConnection = connection ? normalizeConnection(connection) : null;
-        const nextDatabase = connection?.type === 'mysql'
-          ? connection.database?.trim() || null
-          : null;
+        const nextDatabase =
+          connection?.type === 'mysql' ? connection.database?.trim() || null : null;
 
         set({
           activeConnectionId: normalizedConnection?.id || null,
@@ -123,7 +125,7 @@ export const useConnectionStore = create<ConnectionStore>()(
       },
 
       setConnectionStatus: (status, error) => {
-        set((state) => ({
+        set(state => ({
           activeConnection: {
             ...state.activeConnection,
             status,
@@ -132,20 +134,22 @@ export const useConnectionStore = create<ConnectionStore>()(
         }));
       },
 
-      setSelectedDatabase: (database) => {
+      setSelectedDatabase: database => {
         set({ selectedDatabase: database });
       },
     }),
     {
       name: 'skylarkdb-connections',
-      partialize: (state) => ({ 
+      partialize: state => ({
         connections: state.connections.map(normalizeConnection),
         activeConnectionId: state.activeConnection.connection?.id || null,
-        selectedDatabase: state.selectedDatabase
+        selectedDatabase: state.selectedDatabase,
       }),
-      onRehydrateStorage: () => (state) => {
+      onRehydrateStorage: () => state => {
         if (state) {
-          state.connections = state.connections.map((connection) => normalizeConnection(connection as DatabaseConnection));
+          state.connections = state.connections.map(connection =>
+            normalizeConnection(connection as DatabaseConnection)
+          );
         }
         if (state && state.activeConnectionId) {
           const connection = state.connections.find(c => c.id === state.activeConnectionId);
@@ -153,11 +157,11 @@ export const useConnectionStore = create<ConnectionStore>()(
             state.activeConnection = {
               connection,
               status: 'disconnected',
-              error: null
+              error: null,
             };
           }
         }
-      }
+      },
     }
   )
 );

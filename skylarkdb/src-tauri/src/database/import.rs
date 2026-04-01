@@ -40,8 +40,7 @@ pub fn map_type_to_mysql(source_type: &str, sample_value: Option<&str>) -> Strin
         }
 
         // Check for integer
-        if value.parse::<i64>().is_ok() {
-            let num = value.parse::<i64>().unwrap();
+        if let Ok(num) = value.parse::<i64>() {
             if num >= 0 && num <= 255 {
                 return "TINYINT".to_string();
             } else if num >= -32768 && num <= 32767 {

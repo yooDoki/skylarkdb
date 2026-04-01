@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useLayoutEffect } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import { ConnectionList } from '@/components/ConnectionList';
 import { MySQLExplorer } from '@/components/MySQLExplorer';
 import { RedisExplorer } from '@/components/RedisExplorer';
@@ -10,8 +11,20 @@ import { useSidebarStore } from '@/stores/sidebarStore';
 import { useSettings } from '@/hooks/useSettings';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
-import { Database, Server, Sparkles, ChevronRight, FileCode, Table2, CheckCircle2, XCircle, Loader2, Settings } from 'lucide-react';
+import {
+  Database,
+  Server,
+  Sparkles,
+  ChevronRight,
+  FileCode,
+  Table2,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Settings,
+} from 'lucide-react';
 import { connectMySQL, connectRedis } from '@/utils/api';
+import { getTauriHostPlatform, type HostPlatform } from '@/utils/hostPlatform';
 
 type ViewMode = 'explorer' | 'query';
 
@@ -22,9 +35,16 @@ function App() {
   const { settings, isLoaded } = useSettings();
   const [mounted, setMounted] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('explorer');
+  const [appVersion, setAppVersion] = useState<string>('');
+  const [hostPlatform, setHostPlatform] = useState<HostPlatform>(() => getTauriHostPlatform());
+
+  useLayoutEffect(() => {
+    setHostPlatform(getTauriHostPlatform());
+  }, []);
 
   useEffect(() => {
     setMounted(true);
+    getVersion().then(setAppVersion).catch(console.error);
   }, []);
 
   const reconnectActiveConnection = useCallback(async () => {
@@ -34,9 +54,8 @@ function App() {
     setConnectionStatus('connecting');
 
     try {
-      const connectPromise = connection.type === 'mysql'
-        ? connectMySQL(connection)
-        : connectRedis(connection);
+      const connectPromise =
+        connection.type === 'mysql' ? connectMySQL(connection) : connectRedis(connection);
 
       const timeoutPromise = new Promise<never>((_, reject) => {
         window.setTimeout(() => {
@@ -58,10 +77,20 @@ function App() {
       }
       setConnectionStatus('error', errorMessage);
     }
-  }, [activeConnection.connection, setConnectionStatus, settings.connectionTimeout, updateConnection]);
+  }, [
+    activeConnection.connection,
+    setConnectionStatus,
+    settings.connectionTimeout,
+    updateConnection,
+  ]);
 
   useEffect(() => {
-    if (!isLoaded || !settings.autoReconnect || !activeConnection.connection || activeConnection.status !== 'disconnected') {
+    if (
+      !isLoaded ||
+      !settings.autoReconnect ||
+      !activeConnection.connection ||
+      activeConnection.status !== 'disconnected'
+    ) {
       return;
     }
 
@@ -79,7 +108,13 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeConnection.connection, activeConnection.status, isLoaded, reconnectActiveConnection, settings.autoReconnect]);
+  }, [
+    activeConnection.connection,
+    activeConnection.status,
+    isLoaded,
+    reconnectActiveConnection,
+    settings.autoReconnect,
+  ]);
 
   // Theme is handled by useSettings hook
 
@@ -93,19 +128,19 @@ function App() {
         return {
           icon: <CheckCircle2 className="h-3 w-3" />,
           text: `${activeConnection.connection.name} (${activeConnection.connection.type.toUpperCase()})`,
-          color: 'text-green-500'
+          color: 'text-green-500',
         };
       case 'connecting':
         return {
           icon: <Loader2 className="h-3 w-3 animate-spin" />,
           text: '连接中...',
-          color: 'text-amber-500'
+          color: 'text-amber-500',
         };
       case 'error':
         return {
           icon: <XCircle className="h-3 w-3" />,
           text: '连接失败',
-          color: 'text-destructive'
+          color: 'text-destructive',
         };
       default:
         return { icon: null, text: '未连接', color: 'text-muted-foreground' };
@@ -121,13 +156,49 @@ function App() {
         <UpdateChecker autoCheck={shouldAutoCheckUpdates} />
       </div>
 
+      {/* macOS：与 Overlay 标题栏配合，为红绿灯留出可视区域；Windows/Linux：原生标题栏已显示应用名，仅保留工具条 */}
+      {hostPlatform === 'macos' ? (
+        <div className="h-9 flex items-center justify-end px-4 bg-muted/30 border-b">
+          <span className="text-xs font-medium text-muted-foreground absolute left-1/2 -translate-x-1/2">
+            SkylarkDB
+          </span>
+          <SettingsDialog
+            trigger={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md hover:bg-muted"
+                title="设置 (⌘,)"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <div className="h-9 flex items-center justify-end px-2 bg-muted/30 border-b">
+          <SettingsDialog
+            trigger={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-md hover:bg-muted"
+                title="设置 (Ctrl+,)"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            }
+          />
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left Sidebar - Connections */}
         <div
           className={cn(
-            "border-r bg-muted/30 overflow-hidden transition-all duration-300 ease-in-out",
-            collapsed ? "w-0" : "w-80"
+            'border-r bg-muted/30 overflow-hidden transition-all duration-300 ease-in-out flex-shrink-0',
+            collapsed ? 'w-0' : 'w-[260px]'
           )}
         >
           <ConnectionList collapsed={collapsed} />
@@ -137,35 +208,20 @@ function App() {
         <button
           onClick={toggle}
           className={cn(
-            "absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-6 h-12 bg-background border border-border rounded-r-lg shadow-md hover:bg-muted transition-all duration-300 group",
-            collapsed ? "left-0" : "left-[320px]"
+            'absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-5 h-10 bg-background border border-border rounded-r-lg shadow-sm hover:bg-muted transition-all duration-300 group',
+            collapsed ? 'left-0' : 'left-[260px]'
           )}
           title={collapsed ? '展开侧边栏' : '折叠侧边栏'}
         >
-          <div className={cn(
-            "transition-transform duration-300",
-            collapsed ? "rotate-0" : "rotate-180"
-          )}>
-            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+          <div
+            className={cn(
+              'transition-transform duration-300',
+              collapsed ? 'rotate-0' : 'rotate-180'
+            )}
+          >
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground" />
           </div>
         </button>
-
-        {collapsed && (
-          <div className="absolute right-4 top-3 z-20">
-            <SettingsDialog
-              trigger={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 rounded-full border border-border/60 bg-background/90 shadow-sm backdrop-blur hover:bg-muted"
-                  title="设置 (⌘,)"
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              }
-            />
-          </div>
-        )}
 
         {/* Right Content - Database Explorer */}
         <div className="flex-1 overflow-hidden bg-background min-h-0 flex flex-col">
@@ -193,7 +249,9 @@ function App() {
                   </Button>
                 </div>
               )}
-              <div className={`flex-1 min-h-0 h-full overflow-hidden animate-fade-in ${mounted ? 'opacity-100' : 'opacity-0'}`}>
+              <div
+                className={`flex-1 min-h-0 h-full overflow-hidden animate-fade-in ${mounted ? 'opacity-100' : 'opacity-0'}`}
+              >
                 {activeConnection.connection.type === 'mysql' ? (
                   viewMode === 'query' ? (
                     <SqlQueryPanel />
@@ -249,7 +307,7 @@ function App() {
             )}
           </div>
           <div className="flex items-center gap-4 text-muted-foreground">
-            <span>SkylarkDB v0.1.3</span>
+            <span>SkylarkDB v{appVersion || '0.0.0'}</span>
           </div>
         </div>
       )}

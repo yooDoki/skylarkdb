@@ -4,10 +4,17 @@ import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
 import { RefreshCw, Download, CheckCircle, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
+import { logError, logInfo } from '@/utils/errorHandler';
 
-export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck?: boolean; currentVersion?: string }) {
+export function UpdateChecker({
+  autoCheck = false,
+  currentVersion,
+}: {
+  autoCheck?: boolean;
+  currentVersion?: string;
+}) {
   const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<any>(null);
+  const [updateInfo, setUpdateInfo] = useState<any | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [checkResult, setCheckResult] = useState<string>('');
@@ -19,9 +26,9 @@ export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck
     const lower = message.toLowerCase();
 
     if (
-      lower.includes('404')
-      || lower.includes('not found')
-      || lower.includes('failed to deserialize response')
+      lower.includes('404') ||
+      lower.includes('not found') ||
+      lower.includes('failed to deserialize response')
     ) {
       return {
         silent: true,
@@ -42,10 +49,10 @@ export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck
     setCheckResult('');
     setError(null);
     setDownloadProgress(0);
-    
+
     try {
-      const update = await check();
-      
+      const update: any = await check();
+
       if (update) {
         setUpdateInfo(update);
         setUpdateAvailable(true);
@@ -54,7 +61,7 @@ export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck
         setCheckResult('当前已是最新版本');
       }
     } catch (err) {
-      console.error('检查更新失败:', err);
+      logError('Update Checker - Check Update', err);
       const normalized = normalizeUpdateError(err);
       setError(normalized.error);
       setCheckResult(normalized.result);
@@ -65,14 +72,14 @@ export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck
 
   const handleInstall = async () => {
     if (!updateInfo) return;
-    
+
     setIsInstalling(true);
     setDownloadProgress(0);
-    
+
     try {
       await updateInfo.downloadAndInstall((event: any) => {
-        console.log('更新事件:', event);
-        
+        logInfo('Update Checker - Event', JSON.stringify(event));
+
         if (event.event === 'Started') {
           setDownloadProgress(0);
         } else if (event.event === 'Progress') {
@@ -85,10 +92,10 @@ export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck
           setDownloadProgress(100);
         }
       });
-      
+
       setUpdateAvailable(false);
     } catch (err) {
-      console.error('安装更新失败:', err);
+      logError('Update Checker - Install Update', err);
       setError(err instanceof Error ? err.message : '安装更新时发生未知错误');
     } finally {
       setIsInstalling(false);
@@ -109,10 +116,10 @@ export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck
             {checkResult}
           </span>
         )}
-        <Button 
+        <Button
           variant="outline"
           size="sm"
-          onClick={checkForUpdates} 
+          onClick={checkForUpdates}
           disabled={isChecking || isInstalling}
           className="h-7 text-xs"
         >
@@ -124,7 +131,7 @@ export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck
           {isChecking ? '检查中...' : '检查更新'}
         </Button>
       </div>
-      
+
       <Dialog open={updateAvailable} onOpenChange={setUpdateAvailable}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
@@ -136,7 +143,7 @@ export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck
               SkylarkDB {updateInfo?.version} 可用，您当前的版本是 {currentVersion || '未知'}
             </p>
           </DialogHeader>
-          
+
           <div className="py-4 space-y-4">
             {updateInfo?.body && (
               <Card>
@@ -148,7 +155,7 @@ export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck
                 </CardContent>
               </Card>
             )}
-            
+
             {isInstalling && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
@@ -156,14 +163,14 @@ export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck
                   <span>{downloadProgress}%</span>
                 </div>
                 <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-primary transition-all duration-300"
                     style={{ width: `${downloadProgress}%` }}
                   />
                 </div>
               </div>
             )}
-            
+
             {error && (
               <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                 <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
@@ -171,20 +178,16 @@ export function UpdateChecker({ autoCheck = false, currentVersion }: { autoCheck
               </div>
             )}
           </div>
-          
+
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setUpdateAvailable(false)}
               disabled={isInstalling}
             >
               稍后
             </Button>
-            <Button 
-              onClick={handleInstall} 
-              disabled={isInstalling}
-              className="gap-2"
-            >
+            <Button onClick={handleInstall} disabled={isInstalling} className="gap-2">
               {isInstalling ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />

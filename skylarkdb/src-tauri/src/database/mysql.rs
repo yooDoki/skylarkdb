@@ -42,6 +42,77 @@ pub async fn get_databases(connection_id: &str) -> Result<Vec<String>, String> {
     Ok(databases)
 }
 
+/// 用于 `CHARACTER SET` / `COLLATE` 子句中的名称校验，避免拼接注入。
+fn is_safe_charset_collation_name(s: &str) -> bool {
+    let len = s.len();
+    if len == 0 || len > 128 {
+        return false;
+    }
+    s.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+pub async fn create_database(
+    connection_id: &str,
+    database_name: &str,
+    charset: Option<&str>,
+    collation: Option<&str>,
+) -> Result<(), String> {
+    ensure_connection_writable(connection_id).await?;
+
+    let name = database_name.trim();
+    if name.is_empty() {
+        return Err("数据库名不能为空".to_string());
+    }
+    if name.len() > 64 {
+        return Err("数据库名过长（MySQL 上限为 64 字节）".to_string());
+    }
+    if name.as_bytes().iter().any(|&b| b == 0) {
+        return Err("数据库名包含非法字符".to_string());
+    }
+
+    let esc = escape_mysql_ident(name);
+    let mut sql = format!("CREATE DATABASE `{}`", esc);
+
+    let cs_opt = charset.map(str::trim).filter(|s| !s.is_empty());
+    let co_opt = collation.map(str::trim).filter(|s| !s.is_empty());
+
+    if let Some(cs) = cs_opt {
+        if !is_safe_charset_collation_name(cs) {
+            return Err("字符集名称格式无效".to_string());
+        }
+        sql.push_str(&format!(" CHARACTER SET {}", cs));
+    }
+    if let Some(co) = co_opt {
+        if !is_safe_charset_collation_name(co) {
+            return Err("排序规则名称格式无效".to_string());
+        }
+        sql.push_str(&format!(" COLLATE {}", co));
+    }
+
+    let pool = {
+        let connections = MYSQL_CONNECTIONS.lock().await;
+        connections
+            .get(connection_id)
+            .cloned()
+            .ok_or("Connection not found")?
+    };
+
+    sqlx::query(&sql)
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("1007") || msg.to_lowercase().contains("database exists") {
+                format!("创建失败：数据库「{}」已存在", name)
+            } else {
+                format!("创建数据库失败: {}", msg)
+            }
+        })?;
+
+    Ok(())
+}
+
 /// 解析表所在的 schema。优先使用 `preferred_schema`（若该库下确有此表），
 /// 避免「侧栏按表名去重 + 缓存的默认库」指向错误库（同名表在不同 database）。
 async fn resolve_table_schema(
@@ -272,14 +343,16 @@ pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult
         .as_deref()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or("root");
+
+    // 只有当密码存储策略为 system 时，才从钥匙串读取密码
     let password = if let Some(password) = connection
         .password
         .as_deref()
         .filter(|s| !s.trim().is_empty())
     {
         password.to_string()
-    } else if connection.has_password {
-        secrets::require_connection_password(&connection.id)?
+    } else if connection.password_storage == Some("system".to_string()) && connection.has_password {
+        secrets::require_connection_password(&connection.id).await?
     } else {
         String::new()
     };
@@ -361,7 +434,7 @@ pub async fn test_connection(
         pass.to_string()
     } else if use_stored_secret {
         if let Some(connection_id) = connection_id {
-            secrets::require_connection_password(connection_id)?
+            secrets::require_connection_password(connection_id).await?
         } else {
             return Err("缺少连接 ID，无法读取系统钥匙串中的密码".to_string());
         }
@@ -879,7 +952,7 @@ pub async fn insert_record(
 
     let mut q = sqlx::query(&query);
     for col in &columns {
-        let val = obj.get(*col).unwrap();
+        let val = obj.get(*col).ok_or_else(|| format!("Missing required column: {}", col))?;
         q = bind_value(q, val);
     }
 
@@ -948,12 +1021,17 @@ pub async fn update_record(
     let mut q = sqlx::query(&query);
 
     for col in obj.keys().filter(|k| !locator.contains_key(*k)) {
-        let val = obj.get(col).unwrap();
+        let val = obj.get(col).ok_or_else(|| format!("Missing column value: {}", col))?;
         q = bind_value(q, val);
     }
 
     for key in locator.keys() {
-        let val = locator.get(key).unwrap();
+        let val = locator.get(key).ok_or_else(|| format!("Missing locator value: {}", key))?;
+        q = bind_value(q, val);
+    }
+
+    for key in locator.keys() {
+        let val = locator.get(key).ok_or_else(|| format!("Missing locator value: {}", key))?;
         q = bind_value(q, val);
     }
 
@@ -1009,7 +1087,7 @@ pub async fn delete_record(
 
     let mut q = sqlx::query(&query);
     for key in locator.keys() {
-        let val = locator.get(key).unwrap();
+        let val = locator.get(key).ok_or_else(|| format!("Missing locator key: {}", key))?;
         q = bind_value(q, val);
     }
 

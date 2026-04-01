@@ -25,6 +25,7 @@ thiserror = "1"
 once_cell = "1"
 base64 = "0.22"
 hex = "0.4"
+tauri-plugin-os = { version = "2.0.0-beta", default-features = false }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

@@ -13,12 +13,14 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_os::init())
         .invoke_handler(tauri::generate_handler![
             commands::mysql::connect_mysql,
             commands::mysql::test_mysql_connection,
             commands::mysql::get_mysql_table_data,
             commands::mysql::disconnect_mysql,
             commands::mysql::get_mysql_databases,
+            commands::mysql::create_mysql_database,
             commands::mysql::get_mysql_tables,
             commands::mysql::get_mysql_columns,
             commands::mysql::execute_mysql_query,
@@ -50,6 +52,11 @@ fn main() {
             commands::redis::get_redis_databases,
             commands::redis::select_redis_database,
             commands::redis::get_selected_redis_database,
+            commands::redis::set_redis_key,
+            commands::redis::set_redis_key_ttl,
+            commands::redis::rename_redis_key,
+            commands::redis::export_redis_key,
+            commands::redis::import_redis_data,
         ])
         .setup(|app| {
             // 双重兜底：即便配置未生效，也强制最小窗口尺寸，避免 UI 被拖到变形
@@ -58,8 +65,9 @@ fn main() {
             }
             #[cfg(debug_assertions)]
             {
-                let window = app.get_webview_window("main").unwrap();
-                window.open_devtools();
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                }
             }
             Ok(())
         })

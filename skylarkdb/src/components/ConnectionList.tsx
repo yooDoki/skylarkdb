@@ -3,13 +3,13 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { ConnectionForm } from './ConnectionForm';
 import { ConnectionItem } from './ConnectionItem';
-import { SettingsDialog } from './SettingsDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DatabaseConnection } from '@/types';
-import { Database, Plus, Search, Filter, X, Play, Settings } from 'lucide-react';
+import { Database, Plus, Search, X, Play } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { logError } from '@/utils/errorHandler';
 import {
   connectMySQL,
   connectRedis,
@@ -17,11 +17,6 @@ import {
   disconnectMySQL,
   disconnectRedis,
 } from '@/utils/api';
-
-type SortField = 'name' | 'type' | 'host' | 'createdAt' | 'updatedAt';
-type SortOrder = 'asc' | 'desc';
-type FilterType = 'all' | 'mysql' | 'redis';
-type FilterStatus = 'all' | 'connected' | 'disconnected' | 'connecting' | 'error';
 
 interface ConnectionListProps {
   collapsed?: boolean;
@@ -34,19 +29,24 @@ interface ContextMenuState {
   connection: DatabaseConnection | null;
 }
 
+type SortField = 'name' | 'type' | 'host' | 'createdAt' | 'updatedAt';
+type SortOrder = 'asc' | 'desc';
+type FilterType = 'all' | 'mysql' | 'redis';
+type FilterStatus = 'all' | 'connected' | 'disconnected' | 'connecting' | 'error';
+
 const ESTIMATED_ITEM_HEIGHT = 72;
 
 export function ConnectionList({ collapsed = false }: ConnectionListProps) {
-  const { 
-    connections, 
-    activeConnection, 
+  const {
+    connections,
+    activeConnection,
     addConnection,
-    deleteConnection, 
-    setActiveConnection, 
+    deleteConnection,
+    setActiveConnection,
     setConnectionStatus,
     updateConnection,
   } = useConnectionStore();
-  
+
   const [showForm, setShowForm] = useState(false);
   const [editingConnection, setEditingConnection] = useState<DatabaseConnection | undefined>();
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,7 +55,6 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
-  const [showFilters, setShowFilters] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string | null }>({
     open: false,
     id: null,
@@ -91,8 +90,8 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
     if (debouncedSearch.trim()) {
       const term = debouncedSearch.toLowerCase();
       result = result.filter(
-        (conn) => 
-          conn.name.toLowerCase().includes(term) || 
+        conn =>
+          conn.name.toLowerCase().includes(term) ||
           conn.host.toLowerCase().includes(term) ||
           conn.type.toLowerCase().includes(term) ||
           (conn.database && conn.database.toLowerCase().includes(term))
@@ -113,7 +112,7 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
 
     result.sort((a, b) => {
       let comparison = 0;
-      
+
       switch (sortField) {
         case 'name':
           comparison = a.name.localeCompare(b.name, 'zh-CN');
@@ -131,12 +130,20 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
           comparison = a.updatedAt - b.updatedAt;
           break;
       }
-      
+
       return sortOrder === 'asc' ? comparison : -comparison;
     });
 
     return result;
-  }, [connections, debouncedSearch, sortField, sortOrder, filterType, filterStatus, activeConnection]);
+  }, [
+    connections,
+    debouncedSearch,
+    sortField,
+    sortOrder,
+    filterType,
+    filterStatus,
+    activeConnection,
+  ]);
 
   const virtualizer = useVirtualizer({
     count: filteredAndSortedConnections.length,
@@ -145,31 +152,34 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
     overscan: 5,
   });
 
-  const handleConnect = useCallback(async (connection: DatabaseConnection) => {
-    setActiveConnection(connection);
-    setConnectionStatus('connecting');
+  const handleConnect = useCallback(
+    async (connection: DatabaseConnection) => {
+      setActiveConnection(connection);
+      setConnectionStatus('connecting');
 
-    try {
-      let result;
-      if (connection.type === 'mysql') {
-        result = await connectMySQL(connection);
-      } else {
-        result = await connectRedis(connection);
-      }
+      try {
+        let result;
+        if (connection.type === 'mysql') {
+          result = await connectMySQL(connection);
+        } else {
+          result = await connectRedis(connection);
+        }
 
-      if (result.success) {
-        setConnectionStatus('connected');
-      } else {
-        setConnectionStatus('error', result.message);
+        if (result.success) {
+          setConnectionStatus('connected');
+        } else {
+          setConnectionStatus('error', result.message);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('系统钥匙串中没有找到该连接的已保存密码')) {
+          updateConnection(connection.id, { hasPassword: false });
+        }
+        setConnectionStatus('error', errorMessage);
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes('系统钥匙串中没有找到该连接的已保存密码')) {
-        updateConnection(connection.id, { hasPassword: false });
-      }
-      setConnectionStatus('error', errorMessage);
-    }
-  }, [setActiveConnection, setConnectionStatus, updateConnection]);
+    },
+    [setActiveConnection, setConnectionStatus, updateConnection]
+  );
 
   const handleDisconnect = useCallback(async () => {
     const currentConnection = activeConnection.connection;
@@ -183,7 +193,7 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
         }
       }
     } catch (error) {
-      console.error('Failed to disconnect from backend:', error);
+      logError('Connection List - Disconnect', error);
     } finally {
       setActiveConnection(null);
       setConnectionStatus('disconnected');
@@ -203,7 +213,7 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
 
   const handleConfirmDelete = useCallback(async () => {
     if (deleteConfirm.id) {
-      const targetConnection = connections.find((connection) => connection.id === deleteConfirm.id);
+      const targetConnection = connections.find(connection => connection.id === deleteConfirm.id);
 
       if (activeConnection.connection?.id === deleteConfirm.id) {
         try {
@@ -213,13 +223,13 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
             await disconnectRedis(activeConnection.connection.id);
           }
         } catch (error) {
-          console.error('Failed to disconnect active connection before delete:', error);
+          logError('Connection List - Disconnect Before Delete', error);
         }
       }
 
       if (targetConnection?.passwordStorage === 'system' && targetConnection.hasPassword) {
-        await deleteConnectionPassword(deleteConfirm.id).catch((error) => {
-          console.error('Failed to delete saved password:', error);
+        await deleteConnectionPassword(deleteConfirm.id).catch(error => {
+          logError('Connection List - Delete Password', error);
         });
       }
 
@@ -228,18 +238,22 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
     setDeleteConfirm({ open: false, id: null });
   }, [activeConnection.connection, connections, deleteConfirm.id, deleteConnection]);
 
-  const handleDuplicate = useCallback((connection: DatabaseConnection) => {
-    const { id, createdAt, updatedAt, ...rest } = connection;
-    const shouldCopyLocalPassword = (connection.passwordStorage ?? 'local') === 'local' && !!connection.password?.trim();
+  const handleDuplicate = useCallback(
+    (connection: DatabaseConnection) => {
+      const { id, createdAt, updatedAt, ...rest } = connection;
+      const shouldCopyLocalPassword =
+        (connection.passwordStorage ?? 'local') === 'local' && !!connection.password?.trim();
 
-    addConnection({
-      ...rest,
-      name: `${connection.name} (副本)`,
-      passwordStorage: 'local',
-      hasPassword: shouldCopyLocalPassword,
-      password: shouldCopyLocalPassword ? connection.password : undefined,
-    });
-  }, [addConnection]);
+      addConnection({
+        ...rest,
+        name: `${connection.name} (副本)`,
+        passwordStorage: 'local',
+        hasPassword: shouldCopyLocalPassword,
+        password: shouldCopyLocalPassword ? connection.password : undefined,
+      });
+    },
+    [addConnection]
+  );
 
   const handleContextMenu = useCallback((e: React.MouseEvent, connection: DatabaseConnection) => {
     e.preventDefault();
@@ -256,15 +270,15 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
   }, []);
 
   useEffect(() => {
+    if (!contextMenu.isOpen) return;
+
     const handleClick = () => handleCloseContextMenu();
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') handleCloseContextMenu();
     };
 
-    if (contextMenu.isOpen) {
-      document.addEventListener('click', handleClick);
-      document.addEventListener('keydown', handleEscape);
-    }
+    document.addEventListener('click', handleClick);
+    document.addEventListener('keydown', handleEscape);
 
     return () => {
       document.removeEventListener('click', handleClick);
@@ -272,231 +286,51 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
     };
   }, [contextMenu.isOpen, handleCloseContextMenu]);
 
-  const handleSortChange = useCallback((field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortOrder('asc');
-    }
-  }, [sortField]);
-
-  const clearFilters = useCallback(() => {
-    setSearchTerm('');
-    setFilterType('all');
-    setFilterStatus('all');
-    setSortField('updatedAt');
-    setSortOrder('desc');
-  }, []);
-
-  const hasActiveFilters = searchTerm || filterType !== 'all' || filterStatus !== 'all' || 
-    sortField !== 'updatedAt' || sortOrder !== 'desc';
-
   const items = virtualizer.getVirtualItems();
-
-  const activeFiltersCount = [
-    filterType !== 'all',
-    filterStatus !== 'all',
-    sortField !== 'updatedAt' || sortOrder !== 'desc',
-  ].filter(Boolean).length;
 
   return (
     <>
-      <div className={cn(
-        "h-full flex flex-col p-4 transition-opacity duration-300",
-        collapsed ? "opacity-0 pointer-events-none" : "opacity-100"
-      )}>
-        <div className="mb-4 rounded-2xl border border-border/60 bg-gradient-to-br from-background via-background to-muted/35 p-3 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/15">
-                <div className="absolute inset-0 rounded-2xl bg-primary/10 blur-xl" />
-                <Database className="relative h-5 w-5 text-primary" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-base font-bold leading-tight">
-                  <span className="gradient-text">Skylark</span>
-                  <span className="text-foreground">DB</span>
-                </h1>
-                <p className="text-[11px] text-muted-foreground">数据库管理工具</p>
-              </div>
-            </div>
-            <SettingsDialog
-              trigger={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-full border border-border/60 bg-background/80 hover:bg-muted"
-                  title="设置 (⌘,)"
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              }
+      <div
+        className={cn(
+          'h-full flex flex-col transition-opacity duration-300',
+          collapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        )}
+      >
+        {/* Search + New Button - 合并在一行 */}
+        <div className="px-3 py-2 flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="搜索连接..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="h-7 pl-7 pr-6 rounded-md text-xs"
             />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
           </div>
-
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <h2 className="text-sm font-semibold text-muted-foreground">连接列表</h2>
-              {connections.length > 0 && (
-                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                  {filteredAndSortedConnections.length === connections.length
-                    ? connections.length
-                    : `${filteredAndSortedConnections.length}/${connections.length}`}
-                </span>
-              )}
-            </div>
-            <Button
-              size="sm"
-              onClick={() => { setEditingConnection(undefined); setShowForm(true); }}
-              className="h-7 px-2.5 text-xs rounded-full"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              新建
-            </Button>
-          </div>
+          <Button
+            size="icon"
+            onClick={() => {
+              setEditingConnection(undefined);
+              setShowForm(true);
+            }}
+            className="h-7 w-7 rounded-md"
+            variant="secondary"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
         </div>
 
-        {connections.length > 0 && (
-          <>
-            <div className="mb-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                <Input
-                  placeholder="搜索连接..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-8 pl-9 pr-8 rounded-lg text-sm"
-                />
-                {searchTerm && (
-                  <button
-                    onClick={() => setSearchTerm('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5 mb-2">
-              <Button
-                variant={showFilters ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => setShowFilters(!showFilters)}
-              >
-                <Filter className="h-3 w-3 mr-1" />
-                筛选
-                {activeFiltersCount > 0 && (
-                  <span className="ml-1 px-1 py-0 bg-primary/20 rounded text-[10px] text-primary">
-                    {activeFiltersCount}
-                  </span>
-                )}
-              </Button>
-
-              {hasActiveFilters && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={clearFilters}
-                >
-                  <X className="h-3 w-3 mr-1" />
-                  清除
-                </Button>
-              )}
-            </div>
-
-            {showFilters && (
-              <div className="mb-3 p-2.5 bg-muted/30 rounded-lg border border-border/50 space-y-2.5">
-                {/* Type Filter */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground w-8">类型</span>
-                  <div className="flex gap-1 flex-1 flex-wrap">
-                    {(['all', 'mysql', 'redis'] as const).map((type) => (
-                      <button
-                        key={type}
-                        onClick={() => setFilterType(type)}
-                        className={cn(
-                          "px-2 py-0.5 text-[11px] rounded transition-all",
-                          filterType === type
-                            ? type === 'mysql'
-                              ? "bg-mysql/15 text-mysql"
-                              : type === 'redis'
-                              ? "bg-redis/15 text-redis"
-                              : "bg-primary/15 text-primary"
-                            : "hover:bg-muted text-muted-foreground"
-                        )}
-                      >
-                        {type === 'all' ? '全部' : type.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Status Filter */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground w-8">状态</span>
-                  <div className="flex gap-1 flex-1 flex-wrap">
-                    {([
-                      { value: 'all', label: '全部' },
-                      { value: 'connected', label: '已连接' },
-                      { value: 'disconnected', label: '未连接' },
-                      { value: 'connecting', label: '连接中' },
-                      { value: 'error', label: '错误' },
-                    ] as const).map((status) => (
-                      <button
-                        key={status.value}
-                        onClick={() => setFilterStatus(status.value)}
-                        className={cn(
-                          "px-2 py-0.5 text-[11px] rounded transition-all",
-                          filterStatus === status.value
-                            ? "bg-primary/15 text-primary"
-                            : "hover:bg-muted text-muted-foreground"
-                        )}
-                      >
-                        {status.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Sort */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground w-8">排序</span>
-                  <div className="flex gap-1 flex-1 flex-wrap">
-                    {([
-                      { field: 'updatedAt' as const, label: '时间' },
-                      { field: 'name' as const, label: '名称' },
-                      { field: 'type' as const, label: '类型' },
-                    ]).map((sort) => (
-                      <button
-                        key={sort.field}
-                        onClick={() => handleSortChange(sort.field)}
-                        className={cn(
-                          "px-2 py-0.5 text-[11px] rounded transition-all",
-                          sortField === sort.field
-                            ? "bg-primary/15 text-primary"
-                            : "hover:bg-muted text-muted-foreground"
-                        )}
-                      >
-                        {sort.label}
-                        {sortField === sort.field && (
-                          <span className="ml-0.5">{sortOrder === 'asc' ? '↑' : '↓'}</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        <div 
-          ref={scrollContainerRef} 
-          className="flex-1 overflow-auto -mx-4 px-4"
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-auto px-3"
           style={{ contain: 'strict' }}
         >
           {filteredAndSortedConnections.length === 0 ? (
@@ -522,9 +356,9 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
             </div>
           ) : filteredAndSortedConnections.length < 20 ? (
             <div className="space-y-2">
-              {filteredAndSortedConnections.map((connection) => {
+              {filteredAndSortedConnections.map(connection => {
                 const isActive = activeConnection.connection?.id === connection.id;
-                
+
                 return (
                   <ConnectionItem
                     key={connection.id}
@@ -550,12 +384,12 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
                 position: 'relative',
               }}
             >
-              {items.map((virtualItem) => {
+              {items.map(virtualItem => {
                 const connection = filteredAndSortedConnections[virtualItem.index];
                 if (!connection) return null;
-                
+
                 const isActive = activeConnection.connection?.id === connection.id;
-                
+
                 return (
                   <div
                     key={virtualItem.key}
@@ -590,7 +424,10 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
 
       {showForm && (
         <ConnectionForm
-          onClose={() => { setShowForm(false); setEditingConnection(undefined); }}
+          onClose={() => {
+            setShowForm(false);
+            setEditingConnection(undefined);
+          }}
           initialData={editingConnection}
         />
       )}

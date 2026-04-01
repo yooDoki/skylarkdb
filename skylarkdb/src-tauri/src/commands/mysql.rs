@@ -68,6 +68,22 @@ pub async fn get_mysql_databases(connection_id: String) -> Result<Vec<String>, S
 }
 
 #[command]
+pub async fn create_mysql_database(
+    connection_id: String,
+    database_name: String,
+    charset: Option<String>,
+    collation: Option<String>,
+) -> Result<(), String> {
+    mysql::create_database(
+        &connection_id,
+        &database_name,
+        charset.as_deref(),
+        collation.as_deref(),
+    )
+    .await
+}
+
+#[command]
 pub async fn get_mysql_tables(
     connection_id: String,
     database: Option<String>,

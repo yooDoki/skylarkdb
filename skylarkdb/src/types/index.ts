@@ -1,4 +1,4 @@
-export type PasswordStorageStrategy = 'local' | 'system';
+export type PasswordStorageStrategy = 'local' | 'system' | 'none';
 
 export interface DatabaseConnection {
   id: string;

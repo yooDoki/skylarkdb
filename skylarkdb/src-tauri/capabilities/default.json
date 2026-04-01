@@ -5,6 +5,7 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "os:default",
     "shell:allow-open",
     "updater:default",
     "updater:allow-check",

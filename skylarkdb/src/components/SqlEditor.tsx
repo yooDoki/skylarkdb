@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { sql, MySQL } from '@codemirror/lang-sql';
-import { oneDark } from '@codemirror/theme-one-dark';
 import { basicSetup } from 'codemirror';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { Prec } from '@codemirror/state';
@@ -10,8 +9,8 @@ import { MySQLTable, MySQLColumn, MySQLRoutine } from '@/types';
 import { useSettings } from '@/hooks/useSettings';
 
 function useDocumentDarkClass(): boolean {
-  const [dark, setDark] = useState(() =>
-    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  const [dark, setDark] = useState(
+    () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   );
   useEffect(() => {
     const el = document.documentElement;
@@ -49,8 +48,43 @@ const lightSqlTheme = EditorView.theme(
     '&.cm-focused .cm-selectionBackground, ::selection': {
       backgroundColor: 'hsl(221.2 83.2% 53.3% / 0.2)',
     },
+    '.cm-placeholder': {
+      color: 'hsl(215.4 16.3% 46.9%)',
+    },
   },
   { dark: false }
+);
+
+const darkSqlTheme = EditorView.theme(
+  {
+    '&': {
+      fontSize: '14px',
+      backgroundColor: 'hsl(220 13% 12% / 0.6)',
+    },
+    '.cm-scroller': {
+      fontFamily:
+        'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+    },
+    '.cm-gutters': {
+      backgroundColor: 'hsl(220 13% 10% / 0.8)',
+      color: 'hsl(215 15% 55%)',
+      border: 'none',
+      borderRight: '1px solid hsl(220 13% 20% / 0.5)',
+    },
+    '&.cm-focused': {
+      outline: 'none',
+    },
+    '&.cm-focused .cm-cursor': {
+      borderLeftColor: 'hsl(217 91% 65%)',
+    },
+    '&.cm-focused .cm-selectionBackground, ::selection': {
+      backgroundColor: 'hsl(217 91% 65% / 0.25)',
+    },
+    '.cm-placeholder': {
+      color: 'hsl(215 15% 45%)',
+    },
+  },
+  { dark: true }
 );
 
 export interface SqlEditorProps {
@@ -94,59 +128,54 @@ export function SqlEditor({
 
   const schema = useMemo(() => {
     const s: Record<string, string[]> = {};
-    const tableNames = new Set(tables.map((t) => t.name));
+    const tableNames = new Set(tables.map(t => t.name));
     for (const t of tables) {
-      s[t.name] = tableColumns.get(t.name)?.map((c) => c.name) ?? [];
+      s[t.name] = tableColumns.get(t.name)?.map(c => c.name) ?? [];
     }
     for (const r of routines) {
       if (tableNames.has(r.name)) continue;
-      const cols = r.parameters
-        .map((p) => p.name)
-        .filter((n): n is string => Boolean(n));
+      const cols = r.parameters.map(p => p.name).filter((n): n is string => Boolean(n));
       s[r.name] = cols.length > 0 ? cols : ['(routine)'];
     }
     return s;
   }, [tables, tableColumns, routines]);
 
-  const extensions = useMemo(
-    () => {
-      const exts = [
-        basicSetup,
-        EditorView.contentAttributes.of({ 'data-language': 'text/x-mysql' }),
-        sql({
-          dialect: MySQL,
-          schema,
-          upperCaseKeywords: false,
-        }),
-        keymap.of(completionKeymap),
-        Prec.highest(
-          keymap.of([
-            {
-              key: 'Mod-Enter',
-              run: () => {
-                executeRef.current?.();
-                return true;
-              },
+  const extensions = useMemo(() => {
+    const exts = [
+      basicSetup,
+      EditorView.contentAttributes.of({ 'data-language': 'text/x-mysql' }),
+      sql({
+        dialect: MySQL,
+        schema,
+        upperCaseKeywords: false,
+      }),
+      keymap.of(completionKeymap),
+      Prec.highest(
+        keymap.of([
+          {
+            key: 'Mod-Enter',
+            run: () => {
+              executeRef.current?.();
+              return true;
             },
-          ])
-        ),
-        isDark ? oneDark : lightSqlTheme,
-      ];
+          },
+        ])
+      ),
+      isDark ? darkSqlTheme : lightSqlTheme,
+    ];
 
-      // Apply word wrap setting
-      if (wordWrap) {
-        exts.push(EditorView.lineWrapping);
-      }
+    // Apply word wrap setting
+    if (wordWrap) {
+      exts.push(EditorView.lineWrapping);
+    }
 
-      // Apply line numbers setting
-      if (showLineNumbers) {
-        exts.push(lineNumbers());
-      }
+    // Apply line numbers setting
+    if (showLineNumbers) {
+      exts.push(lineNumbers());
+    }
 
-      return exts;
-    },
-    [schema, isDark, wordWrap, showLineNumbers]
-  );
+    return exts;
+  }, [schema, isDark, wordWrap, showLineNumbers]);
 
   return (
     <div

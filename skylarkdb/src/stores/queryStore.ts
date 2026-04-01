@@ -23,7 +23,7 @@ interface QueryStore {
   tabs: QueryTab[];
   activeTabId: string;
   globalHistory: QueryHistoryItem[];
-  
+
   addTab: () => void;
   closeTab: (id: string) => void;
   setActiveTabId: (id: string) => void;
@@ -42,7 +42,7 @@ const createDefaultTab = (): QueryTab => ({
   result: null,
   error: null,
   isExecuting: false,
-  history: []
+  history: [],
 });
 
 export const useQueryStore = create<QueryStore>()(
@@ -62,44 +62,40 @@ export const useQueryStore = create<QueryStore>()(
           result: null,
           error: null,
           isExecuting: false,
-          history: []
+          history: [],
         };
         set({
           tabs: [...tabs, newTab],
-          activeTabId: newId
+          activeTabId: newId,
         });
       },
 
-      closeTab: (id) => {
+      closeTab: id => {
         const { tabs, activeTabId } = get();
         if (tabs.length === 1) return;
-        
+
         const newTabs = tabs.filter(t => t.id !== id);
-        const newActiveTabId = activeTabId === id 
-          ? newTabs[0].id 
-          : activeTabId;
-        
+        const newActiveTabId = activeTabId === id ? newTabs[0].id : activeTabId;
+
         set({
           tabs: newTabs,
-          activeTabId: newActiveTabId
+          activeTabId: newActiveTabId,
         });
       },
 
-      setActiveTabId: (id) => {
+      setActiveTabId: id => {
         set({ activeTabId: id });
       },
 
       updateTab: (id, updates) => {
         set(state => ({
-          tabs: state.tabs.map(t => 
-            t.id === id ? { ...t, ...updates } : t
-          )
+          tabs: state.tabs.map(t => (t.id === id ? { ...t, ...updates } : t)),
         }));
       },
 
-      addToHistory: (item) => {
+      addToHistory: item => {
         set(state => ({
-          globalHistory: [item, ...state.globalHistory.slice(0, MAX_HISTORY - 1)]
+          globalHistory: [item, ...state.globalHistory.slice(0, MAX_HISTORY - 1)],
         }));
       },
 
@@ -110,21 +106,21 @@ export const useQueryStore = create<QueryStore>()(
       resetTabs: () => {
         set({
           tabs: [createDefaultTab()],
-          activeTabId: '1'
+          activeTabId: '1',
         });
-      }
+      },
     }),
     {
       name: 'skylarkdb-query-state',
-      partialize: (state) => ({
+      partialize: state => ({
         tabs: state.tabs.map(tab => ({
           id: tab.id,
           name: tab.name,
-          query: tab.query
+          query: tab.query,
         })),
         activeTabId: state.activeTabId,
-        globalHistory: state.globalHistory
-      })
+        globalHistory: state.globalHistory,
+      }),
     }
   )
 );
