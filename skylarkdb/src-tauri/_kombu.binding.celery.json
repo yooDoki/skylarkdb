@@ -1,0 +1,5 @@
+{
+  "key": "_kombu.binding.celery",
+  "type": "set",
+  "value": "[\"celery\\u0006\\u0016\\u0006\\u0016celery\"]"
+}

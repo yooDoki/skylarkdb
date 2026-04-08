@@ -18,7 +18,7 @@ interface OptimizedTableProps<T> {
   columns: Array<{
     key: string;
     title: string;
-    render?: (value: any, row: T) => React.ReactNode;
+    render?: (value: unknown, row: T) => React.ReactNode;
     className?: string;
   }>;
   className?: string;
@@ -31,42 +31,40 @@ interface OptimizedTableProps<T> {
 /**
  * 优化的表格行组件
  */
-const OptimizedTableRow = memo(
-  <T,>({
-    row,
-    columns,
-    onRowClick,
-    keyExtractor,
-  }: {
-    row: T;
-    columns: OptimizedTableProps<T>['columns'];
-    onRowClick?: (row: T) => void;
-    keyExtractor: (row: T) => string | number;
-  }) => {
-    const handleClick = useCallback(() => {
-      onRowClick?.(row);
-    }, [row, onRowClick]);
+const OptimizedTableRow = memo(function OptimizedTableRow<T>({
+  row,
+  columns,
+  onRowClick,
+  keyExtractor,
+}: {
+  row: T;
+  columns: OptimizedTableProps<T>['columns'];
+  onRowClick?: (row: T) => void;
+  keyExtractor: (row: T) => string | number;
+}) {
+  const handleClick = useCallback(() => {
+    onRowClick?.(row);
+  }, [row, onRowClick]);
 
-    return (
-      <TableRow
-        key={keyExtractor(row)}
-        className={cn(
-          'hover:bg-muted/50 cursor-pointer transition-colors',
-          onRowClick && 'hover:bg-muted'
-        )}
-        onClick={handleClick}
-      >
-        {columns.map(column => (
-          <TableCell key={column.key} className={cn('py-2', column.className)}>
-            {column.render
-              ? column.render((row as any)[column.key], row)
-              : String((row as any)[column.key] ?? '')}
-          </TableCell>
-        ))}
-      </TableRow>
-    );
-  }
-) as <T>(props: {
+  return (
+    <TableRow
+      key={keyExtractor(row)}
+      className={cn(
+        'hover:bg-muted/50 cursor-pointer transition-colors',
+        onRowClick && 'hover:bg-muted'
+      )}
+      onClick={handleClick}
+    >
+      {columns.map(column => (
+        <TableCell key={column.key} className={cn('py-2', column.className)}>
+          {column.render
+            ? column.render((row as Record<string, unknown>)[column.key], row)
+            : String((row as Record<string, unknown>)[column.key] ?? '')}
+        </TableCell>
+      ))}
+    </TableRow>
+  );
+}) as <T>(props: {
   row: T;
   columns: OptimizedTableProps<T>['columns'];
   onRowClick?: (row: T) => void;
@@ -149,7 +147,7 @@ export function VirtualizedTable<T>({
   columns: Array<{
     key: string;
     title: string;
-    render?: (value: any, row: T) => React.ReactNode;
+    render?: (value: unknown, row: T) => React.ReactNode;
     className?: string;
   }>;
   className?: string;
@@ -179,8 +177,8 @@ export function VirtualizedTable<T>({
             {columns.map(column => (
               <div key={column.key} className={cn('px-4 flex-1 truncate', column.className)}>
                 {column.render
-                  ? column.render((row as any)[column.key], row)
-                  : String((row as any)[column.key] ?? '')}
+                  ? column.render((row as Record<string, unknown>)[column.key], row)
+                  : String((row as Record<string, unknown>)[column.key] ?? '')}
               </div>
             ))}
           </div>

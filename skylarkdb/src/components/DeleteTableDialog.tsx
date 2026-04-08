@@ -1,12 +1,7 @@
 import { useState } from 'react';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { dropMySQLTable } from '@/utils/api';
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Loader2, Database, Table2, Info, Trash2 } from 'lucide-react';
@@ -18,7 +13,12 @@ interface DeleteTableDialogProps {
   onSuccess: () => void;
 }
 
-export function DeleteTableDialog({ open, onOpenChange, tableName, onSuccess }: DeleteTableDialogProps) {
+export function DeleteTableDialog({
+  open,
+  onOpenChange,
+  tableName,
+  onSuccess,
+}: DeleteTableDialogProps) {
   const { activeConnection, selectedDatabase } = useConnectionStore();
   const isReadOnly = !!activeConnection.connection?.readOnly;
   const [isDeleting, setIsDeleting] = useState(false);
@@ -94,7 +94,9 @@ export function DeleteTableDialog({ open, onOpenChange, tableName, onSuccess }: 
             <div>
               <p className="text-xs font-medium text-destructive">高危操作警告</p>
               <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                删除后，该表中的所有数据、索引和约束都将被<span className="font-medium text-destructive">永久删除</span>且无法恢复。
+                删除后，该表中的所有数据、索引和约束都将被
+                <span className="font-medium text-destructive">永久删除</span>
+                且无法恢复。
               </p>
             </div>
           </div>
@@ -110,7 +112,12 @@ export function DeleteTableDialog({ open, onOpenChange, tableName, onSuccess }: 
 
         {/* Footer */}
         <div className="px-6 py-3 bg-muted/20 border-t border-border/50 flex items-center justify-end gap-2">
-          <Button variant="outline" onClick={handleClose} disabled={isDeleting} className="h-9 px-4">
+          <Button
+            variant="outline"
+            onClick={handleClose}
+            disabled={isDeleting}
+            className="h-9 px-4"
+          >
             取消
           </Button>
           <Button

@@ -1,8 +1,5 @@
 name: CI/CD
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 on:
   push:
     branches: [main]
@@ -26,12 +23,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: npm
           cache-dependency-path: skylarkdb/package-lock.json
 
@@ -58,22 +55,15 @@ jobs:
         working-directory: skylarkdb
         run: npm ci
 
-      - name: Build debug artifacts
-        if: github.ref_type != 'tag'
-        working-directory: skylarkdb
-        run: npm run tauri build -- --debug --verbose
-
-      - name: Build and publish release
-        if: github.ref_type == 'tag'
-        uses: tauri-apps/tauri-action@v0.6.2
+      - name: Build the app
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           projectPath: ./skylarkdb
-          includeRelease: true
-          includeDebug: false
-          tagName: ${{ github.ref_name }}
-          releaseName: Release ${{ github.ref_name }}
+          includeRelease: ${{ github.ref_type == 'tag' }}
+          includeDebug: ${{ github.ref_type != 'tag' }}
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || '' }}
           releaseDraft: false
-          includeUpdaterJson: false
-          args: --verbose

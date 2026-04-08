@@ -34,7 +34,7 @@ class DatabaseConnectionPool {
   /**
    * 获取或创建连接
    */
-  async getConnection(id: string, createConnection: () => Promise<any>): Promise<any> {
+  async getConnection(id: string, createConnection: () => Promise<unknown>): Promise<unknown> {
     const existing = this.pool.get(id);
 
     if (existing && existing.status === 'active') {

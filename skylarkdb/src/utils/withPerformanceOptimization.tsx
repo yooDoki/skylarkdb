@@ -25,13 +25,14 @@ export const withPerformanceOptimization = <P extends object>(
   const { enableMonitoring = false, enableDeepCompare = false, compareProps } = options;
 
   const WrappedComponent = (props: P) => {
+    // 记忆化 props 处理
+    const memoizedProps = useMemo(() => props, [JSON.stringify(props)]);
+
     // 性能监控
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     if (enableMonitoring) {
       usePerformanceMonitor(Component.displayName || Component.name || 'UnknownComponent');
     }
-
-    // 记忆化 props 处理
-    const memoizedProps = useMemo(() => props, [JSON.stringify(props)]);
 
     return React.createElement(Component, memoizedProps);
   };

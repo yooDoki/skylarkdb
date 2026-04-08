@@ -73,7 +73,7 @@ export function ImportDataDialog({ open, onOpenChange, onSuccess }: ImportDataDi
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const filePath = (file as any).webkitRelativePath || file.name;
+      const filePath = file.name;
       setFilePath(filePath);
       setError(null);
     }
@@ -93,7 +93,7 @@ export function ImportDataDialog({ open, onOpenChange, onSuccess }: ImportDataDi
         connectionId: activeConnection.connection.id,
         database,
         filePath,
-        format: format as any,
+        format,
         tableMapping: [],
         onConflict: 'ignore',
       });

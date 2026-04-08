@@ -1,6 +1,6 @@
 /**
  * 自定义标题栏组件
- * 
+ *
  * 功能：
  * 1. 左侧：应用图标 + 标题（可拖拽区域）
  * 2. 右侧：最小化、最大化、关闭按钮
@@ -11,15 +11,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Database, Minus, Square, X, Copy, Settings } from 'lucide-react';
+import { Database, Minus, Square, X, Copy } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { SettingsDialog } from '@/components/SettingsDialog';
-import { Button } from '@/components/ui/button';
 
 export function TitleBar() {
   // 窗口最大化状态
   const [isMaximized, setIsMaximized] = useState(false);
-  
+
   // 获取当前窗口实例
   const appWindow = getCurrentWindow();
 
@@ -29,21 +28,21 @@ export function TitleBar() {
    */
   useEffect(() => {
     let unlisten: (() => void) | null = null;
-    
+
     const setupListener = async () => {
       // 初始检查窗口状态
       const maximized = await appWindow.isMaximized();
       setIsMaximized(maximized);
-      
+
       // 监听窗口大小变化事件
       unlisten = await appWindow.onResized(async () => {
         const newMaximized = await appWindow.isMaximized();
         setIsMaximized(newMaximized);
       });
     };
-    
+
     setupListener();
-    
+
     return () => {
       if (unlisten) {
         unlisten();
@@ -91,13 +90,16 @@ export function TitleBar() {
   /**
    * 双击标题栏 - 最大化/还原窗口
    */
-  const handleDoubleClick = useCallback(async (e: React.MouseEvent) => {
-    // 如果点击的是按钮区域，不触发最大化
-    if ((e.target as HTMLElement).closest('.window-controls')) {
-      return;
-    }
-    await handleMaximize();
-  }, [handleMaximize]);
+  const handleDoubleClick = useCallback(
+    async (e: React.MouseEvent) => {
+      // 如果点击的是按钮区域，不触发最大化
+      if ((e.target as HTMLElement).closest('.window-controls')) {
+        return;
+      }
+      await handleMaximize();
+    },
+    [handleMaximize]
+  );
 
   /**
    * 开始拖拽窗口
@@ -130,33 +132,18 @@ export function TitleBar() {
         <div className="flex h-5 w-5 items-center justify-center rounded bg-primary/10">
           <Database className="h-3 w-3 text-primary" />
         </div>
-        
+
         {/* 应用标题 */}
-        <span className="text-xs font-medium text-foreground/90">
-          SkylarkDB
-        </span>
-        
+        <span className="text-xs font-medium text-foreground/90">SkylarkDB</span>
+
         {/* 版本号 */}
-        <span className="text-[10px] text-muted-foreground">
-          v0.1.8
-        </span>
+        <span className="text-[10px] text-muted-foreground">v0.1.8</span>
       </div>
 
       {/* 右侧：设置按钮 + 窗口控制按钮 */}
       <div className="window-controls flex items-center h-full">
         {/* 设置按钮 */}
-        <SettingsDialog
-          trigger={
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-full w-10 rounded-none border-none bg-transparent hover:bg-muted/80"
-              title="设置 (⌘,)"
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-          }
-        />
+        <SettingsDialog />
 
         {/* 最小化按钮 */}
         <button
@@ -183,11 +170,7 @@ export function TitleBar() {
           )}
           title={isMaximized ? '还原' : '最大化'}
         >
-          {isMaximized ? (
-            <Copy className="h-3 w-3" />
-          ) : (
-            <Square className="h-3 w-3" />
-          )}
+          {isMaximized ? <Copy className="h-3 w-3" /> : <Square className="h-3 w-3" />}
         </button>
 
         {/* 关闭按钮 */}

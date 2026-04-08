@@ -51,10 +51,10 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
   const [editingConnection, setEditingConnection] = useState<DatabaseConnection | undefined>();
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sortField, setSortField] = useState<SortField>('updatedAt');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [filterType, setFilterType] = useState<FilterType>('all');
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+  const [sortField] = useState<SortField>('updatedAt');
+  const [sortOrder] = useState<SortOrder>('desc');
+  const [filterType] = useState<FilterType>('all');
+  const [filterStatus] = useState<FilterStatus>('all');
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string | null }>({
     open: false,
     id: null,
@@ -240,7 +240,7 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
 
   const handleDuplicate = useCallback(
     (connection: DatabaseConnection) => {
-      const { id, createdAt, updatedAt, ...rest } = connection;
+      const { ...rest } = connection;
       const shouldCopyLocalPassword =
         (connection.passwordStorage ?? 'local') === 'local' && !!connection.password?.trim();
 

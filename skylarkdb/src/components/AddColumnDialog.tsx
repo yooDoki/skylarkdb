@@ -368,7 +368,7 @@ export function AddColumnDialog({
                       className="h-10 rounded-xl border-emerald-200 bg-white font-mono shadow-sm focus-visible:ring-emerald-200"
                     />
                     <p className="mt-2 text-xs leading-5 text-emerald-700/80">
-                      常见写法：`NULL`、`CURRENT_TIMESTAMP`、`0`、`'string'`
+                      常见写法：`NULL`、`CURRENT_TIMESTAMP`、`0`、`&apos;string&apos;`
                     </p>
                   </div>
                 )}

@@ -17,7 +17,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Plus, Trash2, Loader2, AlertCircle } from 'lucide-react';
 
@@ -72,7 +72,7 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
   const [error, setError] = useState<string | null>(null);
 
   const handleColumnChange = useCallback(
-    (index: number, field: keyof CreateTableColumn, value: any) => {
+    (index: number, field: keyof CreateTableColumn, value: unknown) => {
       setColumns(prev => {
         const updated = [...prev];
         updated[index] = { ...updated[index], [field]: value };

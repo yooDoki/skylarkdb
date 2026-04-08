@@ -12,15 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  Upload,
-  Loader2,
-  FileJson,
-  FileText,
-  CheckCircle2,
-  AlertCircle,
-  X,
-} from 'lucide-react';
+import { Upload, Loader2, FileJson, FileText, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { importRedisData } from '@/utils/api';
 import { logError } from '@/utils/errorHandler';
 import { cn } from '@/utils/cn';
@@ -63,7 +55,7 @@ export function ImportRedisDataDialog({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const filePath = (file as any).webkitRelativePath || file.name;
+      const filePath = file.name;
       setFilePath(filePath);
       setError(null);
     }
@@ -82,7 +74,7 @@ export function ImportRedisDataDialog({
       await importRedisData({
         connectionId: activeConnection.connection.id,
         filePath,
-        format: format as any,
+        format,
       });
 
       onSuccess();

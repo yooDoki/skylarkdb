@@ -79,7 +79,7 @@ interface TableCache {
   timestamp: number;
 }
 
-type TableRow = Record<string, any>;
+type TableRow = Record<string, unknown>;
 
 interface MySQLExplorerProps {
   onReconnect?: () => void;
@@ -740,7 +740,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
         e.preventDefault();
         e.stopPropagation();
         if (editingRowData.current) {
-          void saveEditingRowRef.current!(editingRowData.current);
+          void saveEditingRowRef.current?.(editingRowData.current);
         }
         return;
       }
@@ -752,7 +752,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
           e.preventDefault();
           e.stopPropagation();
           if (editingRowData.current) {
-            void saveEditingRowRef.current!(editingRowData.current);
+            void saveEditingRowRef.current?.(editingRowData.current);
           }
         }
       }
@@ -885,7 +885,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
 
   const totalPages = Math.ceil((tableData?.totalCount || 0) / pageSize);
 
-  const renderCellContent = (value: any) => {
+  const renderCellContent = (value: unknown) => {
     if (value === null || value === undefined) {
       return (
         <span className="inline-flex items-center rounded-md border border-dashed border-border/80 bg-muted/40 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -1379,7 +1379,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                               </Badge>
                               {canUpdateRows ? (
                                 <span>
-                                  双击单元格或点击"编辑"修改，
+                                  双击单元格或点击「编辑」修改，
                                   <kbd className="rounded border px-1 font-mono text-[10px]">
                                     Tab
                                   </kbd>{' '}
@@ -1705,6 +1705,16 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
         open={showCreateTable}
         onOpenChange={setShowCreateTable}
         onSuccess={handleCreateSuccess}
+      />
+
+      <CreateDatabaseDialog
+        open={showCreateDatabase}
+        onOpenChange={setShowCreateDatabase}
+        onSuccess={() => {
+          if (activeConnection.connection?.id) {
+            loadDatabases(activeConnection.connection.id);
+          }
+        }}
       />
 
       <Dialog

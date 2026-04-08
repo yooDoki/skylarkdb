@@ -1,204 +1,67 @@
-import { useState, useEffect, useCallback, useLayoutEffect } from 'react';
-import { getVersion } from '@tauri-apps/api/app';
+import { useState, useEffect } from 'react';
 import { ConnectionList } from '@/components/ConnectionList';
 import { MySQLExplorer } from '@/components/MySQLExplorer';
 import { RedisExplorer } from '@/components/RedisExplorer';
-import { SqlQueryPanel } from '@/components/SqlQueryPanel';
 import { SettingsDialog } from '@/components/SettingsDialog';
-import { UpdateChecker } from '@/components/UpdateChecker';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { useSidebarStore } from '@/stores/sidebarStore';
-import { useSettings } from '@/hooks/useSettings';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
-import {
-  Database,
-  Server,
-  Sparkles,
-  ChevronRight,
-  FileCode,
-  Table2,
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  Settings,
-} from 'lucide-react';
-import { connectMySQL, connectRedis } from '@/utils/api';
-import { getTauriHostPlatform, type HostPlatform } from '@/utils/hostPlatform';
-
-type ViewMode = 'explorer' | 'query';
+import { Database, Server, Moon, Sun, Sparkles, ChevronRight } from 'lucide-react';
 
 function App() {
-  const shouldAutoCheckUpdates = !import.meta.env.DEV;
-  const { activeConnection, setConnectionStatus, updateConnection } = useConnectionStore();
+  const { activeConnection } = useConnectionStore();
   const { collapsed, toggle } = useSidebarStore();
-  const { settings, isLoaded } = useSettings();
+  const [darkMode, setDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('explorer');
-  const [appVersion, setAppVersion] = useState<string>('');
-  const [hostPlatform, setHostPlatform] = useState<HostPlatform>(() => getTauriHostPlatform());
-
-  useLayoutEffect(() => {
-    setHostPlatform(getTauriHostPlatform());
-  }, []);
 
   useEffect(() => {
     setMounted(true);
-    getVersion().then(setAppVersion).catch(console.error);
   }, []);
 
-  const reconnectActiveConnection = useCallback(async () => {
-    const connection = activeConnection.connection;
-    if (!connection) return;
-
-    setConnectionStatus('connecting');
-
-    try {
-      const connectPromise =
-        connection.type === 'mysql' ? connectMySQL(connection) : connectRedis(connection);
-
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        window.setTimeout(() => {
-          reject(new Error(`连接超时（>${settings.connectionTimeout} 秒）`));
-        }, settings.connectionTimeout * 1000);
-      });
-
-      const result = await Promise.race([connectPromise, timeoutPromise]);
-
-      if (result.success) {
-        setConnectionStatus('connected');
-      } else {
-        setConnectionStatus('error', result.message);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes('系统钥匙串中没有找到该连接的已保存密码')) {
-        updateConnection(connection.id, { hasPassword: false });
-      }
-      setConnectionStatus('error', errorMessage);
-    }
-  }, [
-    activeConnection.connection,
-    setConnectionStatus,
-    settings.connectionTimeout,
-    updateConnection,
-  ]);
-
-  useEffect(() => {
-    if (
-      !isLoaded ||
-      !settings.autoReconnect ||
-      !activeConnection.connection ||
-      activeConnection.status !== 'disconnected'
-    ) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const reconnect = async () => {
-      await reconnectActiveConnection();
-      if (cancelled) {
-        return;
-      }
-    };
-
-    void reconnect();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeConnection.connection,
-    activeConnection.status,
-    isLoaded,
-    reconnectActiveConnection,
-    settings.autoReconnect,
-  ]);
-
-  // Theme is handled by useSettings hook
-
-  // Get connection status display
-  const getConnectionStatus = () => {
-    if (!activeConnection.connection) {
-      return { icon: null, text: '未连接', color: 'text-muted-foreground' };
-    }
-    switch (activeConnection.status) {
-      case 'connected':
-        return {
-          icon: <CheckCircle2 className="h-3 w-3" />,
-          text: `${activeConnection.connection.name} (${activeConnection.connection.type.toUpperCase()})`,
-          color: 'text-green-500',
-        };
-      case 'connecting':
-        return {
-          icon: <Loader2 className="h-3 w-3 animate-spin" />,
-          text: '连接中...',
-          color: 'text-amber-500',
-        };
-      case 'error':
-        return {
-          icon: <XCircle className="h-3 w-3" />,
-          text: '连接失败',
-          color: 'text-destructive',
-        };
-      default:
-        return { icon: null, text: '未连接', color: 'text-muted-foreground' };
-    }
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+    document.documentElement.classList.toggle('dark');
   };
-
-  const connectionStatus = getConnectionStatus();
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Hidden component to auto-check updates on startup */}
-      <div className="hidden">
-        <UpdateChecker autoCheck={shouldAutoCheckUpdates} />
-      </div>
-
-      {/* macOS：与 Overlay 标题栏配合，为红绿灯留出可视区域；Windows/Linux：原生标题栏已显示应用名，仅保留工具条 */}
-      {hostPlatform === 'macos' ? (
-        <div className="h-9 flex items-center justify-end px-4 bg-muted/30 border-b">
-          <span className="text-xs font-medium text-muted-foreground absolute left-1/2 -translate-x-1/2">
-            SkylarkDB
-          </span>
-          <SettingsDialog
-            trigger={
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 rounded-md hover:bg-muted"
-                title="设置 (⌘,)"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-            }
-          />
+      {/* Header */}
+      <header className="h-14 border-b flex items-center justify-between px-4 bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
+            <Database className="h-6 w-6 text-primary relative" />
+          </div>
+          <div className="flex flex-col">
+            <h1 className="text-lg font-bold leading-tight">
+              <span className="gradient-text">Skylark</span>
+              <span className="text-foreground">DB</span>
+            </h1>
+            <span className="text-[10px] text-muted-foreground -mt-0.5">数据库管理工具</span>
+          </div>
         </div>
-      ) : (
-        <div className="h-9 flex items-center justify-end px-2 bg-muted/30 border-b">
-          <SettingsDialog
-            trigger={
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 rounded-md hover:bg-muted"
-                title="设置 (Ctrl+,)"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-            }
-          />
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleDarkMode}
+            className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
+            title="切换主题"
+          >
+            {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
+          <SettingsDialog />
         </div>
-      )}
+      </header>
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left Sidebar - Connections */}
         <div
           className={cn(
-            'border-r bg-muted/30 overflow-hidden transition-all duration-300 ease-in-out flex-shrink-0',
-            collapsed ? 'w-0' : 'w-[260px]'
+            "border-r bg-muted/30 overflow-hidden transition-all duration-300 ease-in-out",
+            collapsed ? "w-0" : "w-80"
           )}
         >
           <ConnectionList collapsed={collapsed} />
@@ -208,61 +71,29 @@ function App() {
         <button
           onClick={toggle}
           className={cn(
-            'absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-5 h-10 bg-background border border-border rounded-r-lg shadow-sm hover:bg-muted transition-all duration-300 group',
-            collapsed ? 'left-0' : 'left-[260px]'
+            "absolute top-1/2 -translate-y-1/2 z-20 flex items-center justify-center w-6 h-12 bg-background border border-border rounded-r-lg shadow-md hover:bg-muted transition-all duration-300 group",
+            collapsed ? "left-0" : "left-[320px]"
           )}
           title={collapsed ? '展开侧边栏' : '折叠侧边栏'}
         >
-          <div
-            className={cn(
-              'transition-transform duration-300',
-              collapsed ? 'rotate-0' : 'rotate-180'
-            )}
-          >
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground" />
+          <div className={cn(
+            "transition-transform duration-300",
+            collapsed ? "rotate-0" : "rotate-180"
+          )}>
+            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
           </div>
         </button>
 
         {/* Right Content - Database Explorer */}
-        <div className="flex-1 overflow-hidden bg-background min-h-0 flex flex-col">
+        <div className="flex-1 overflow-hidden bg-background min-h-0">
           {activeConnection.connection ? (
-            <>
-              {activeConnection.connection.type === 'mysql' && (
-                <div className="flex items-center gap-1 px-4 py-2 border-b bg-muted/30">
-                  <Button
-                    variant={viewMode === 'explorer' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('explorer')}
-                    className="h-7 text-xs"
-                  >
-                    <Table2 className="h-3.5 w-3.5 mr-1.5" />
-                    数据浏览
-                  </Button>
-                  <Button
-                    variant={viewMode === 'query' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('query')}
-                    className="h-7 text-xs"
-                  >
-                    <FileCode className="h-3.5 w-3.5 mr-1.5" />
-                    SQL 查询
-                  </Button>
-                </div>
+            <div className={`h-full min-h-0 animate-fade-in ${mounted ? 'opacity-100' : 'opacity-0'}`}>
+              {activeConnection.connection.type === 'mysql' ? (
+                <MySQLExplorer />
+              ) : (
+                <RedisExplorer />
               )}
-              <div
-                className={`flex-1 min-h-0 h-full overflow-hidden animate-fade-in ${mounted ? 'opacity-100' : 'opacity-0'}`}
-              >
-                {activeConnection.connection.type === 'mysql' ? (
-                  viewMode === 'query' ? (
-                    <SqlQueryPanel />
-                  ) : (
-                    <MySQLExplorer onReconnect={reconnectActiveConnection} />
-                  )
-                ) : (
-                  <RedisExplorer />
-                )}
-              </div>
-            </>
+            </div>
           ) : (
             <div className="flex items-center justify-center h-full min-h-0">
               <div className="text-center animate-scale-in">
@@ -290,27 +121,6 @@ function App() {
           )}
         </div>
       </div>
-
-      {/* Status Bar */}
-      {settings.showStatusBar && isLoaded && (
-        <div className="h-7 border-t bg-muted/30 flex items-center justify-between px-3 text-xs">
-          <div className="flex items-center gap-4">
-            <div className={`flex items-center gap-1.5 ${connectionStatus.color}`}>
-              {connectionStatus.icon}
-              <span>{connectionStatus.text}</span>
-            </div>
-            {activeConnection.connection?.database && (
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Database className="h-3 w-3" />
-                <span>{activeConnection.connection.database}</span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-4 text-muted-foreground">
-            <span>SkylarkDB v{appVersion || '0.0.0'}</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

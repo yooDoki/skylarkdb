@@ -105,7 +105,7 @@ export const useThrottle = <T>(value: T, limit: number): T => {
  */
 export const useBatchUpdates = () => {
   const [, forceUpdate] = useState({});
-  const updatesRef = useRef<any[]>([]);
+  const updatesRef = useRef<(() => void)[]>([]);
   const timeoutRef = useRef<number>();
 
   const batchUpdate = useCallback((updateFn: () => void) => {
@@ -139,6 +139,7 @@ export const usePerformanceMonitor = (componentName: string) => {
     lastRenderTime.current = now;
 
     if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
       console.log(
         `[Performance] ${componentName} rendered ${renderCount.current} times, time since last render: ${timeSinceLastRender}ms`
       );

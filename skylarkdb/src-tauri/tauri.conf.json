@@ -8,7 +8,7 @@
   },
   "identifier": "com.skylarkdb.app",
   "productName": "SkylarkDB",
-  "version": "0.1.8",
+  "version": "0.1.3",
   "app": {
     "security": {
       "csp": null
@@ -16,23 +16,18 @@
     "windows": [
       {
         "fullscreen": false,
-        "height": 900,
+        "height": 800,
         "resizable": true,
         "title": "SkylarkDB",
-        "width": 1400,
-        "minWidth": 1100,
-        "minHeight": 750,
-        "center": true,
-        "decorations": true,
-        "transparent": false,
-        "shadow": true,
-        "titleBarStyle": "Overlay"
+        "width": 1200,
+        "minWidth": 1024,
+        "minHeight": 720,
+        "center": true
       }
     ]
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": false,
     "category": "DeveloperTool",
     "copyright": "",
     "externalBin": [],
@@ -69,8 +64,8 @@
       "endpoints": [
         "https://github.com/yooDoki/skylarkdb/releases/latest/download/latest.json"
       ],
-      "dialog": false,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMxNURCMjg2Mzc4MEZCNjUKUldSbCs0QTNockpkTWZIM2JLRE5XTUg1OUFXVG9zMTJTeGdCN0ZEUzRLcDlJRk5YbmZKZHh3NWkK"
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlBQzVDRDNGRTNCNzI4MUEKUldRYUtMZmpQODNGbXZVQVkrSXIxdUNzVm9EVVo1Qmc0TnBDZ29WY1A3bDM2c0tmQzY5ZGxucEYK"
     }
   }
 }

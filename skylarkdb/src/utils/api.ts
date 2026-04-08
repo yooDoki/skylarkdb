@@ -8,6 +8,7 @@ import {
   RedisInfo,
   MySQLColumn,
   MySQLRoutine,
+  MySQLTable,
   CreateTableColumn,
   AddColumnOptions,
 } from '@/types';
@@ -122,8 +123,11 @@ export async function getMySQLTableData(
   });
 }
 
-export async function getMySQLTables(connectionId: string, database?: string): Promise<any[]> {
-  return invoke<any[]>('get_mysql_tables', { connectionId, database: database ?? null });
+export async function getMySQLTables(
+  connectionId: string,
+  database?: string
+): Promise<MySQLTable[]> {
+  return invoke<MySQLTable[]>('get_mysql_tables', { connectionId, database: database ?? null });
 }
 
 export async function getMySQLColumns(
@@ -163,7 +167,12 @@ export async function updateMySQLRecord(
   data: Record<string, any>,
   recordLocator: Record<string, any>
 ): Promise<number> {
-  return invoke<number>('update_mysql_record', { connectionId, tableName, data, recordLocator });
+  return invoke<number>('update_mysql_record', {
+    connectionId,
+    tableName,
+    data,
+    recordLocator,
+  });
 }
 
 export async function deleteMySQLRecord(

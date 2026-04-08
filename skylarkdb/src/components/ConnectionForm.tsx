@@ -193,10 +193,11 @@ export function ConnectionForm({ onClose, initialData }: ConnectionFormProps) {
         ...formData,
         host: formData.host.trim(),
         username: formData.username.trim() === '' ? undefined : formData.username.trim(),
-        // 本地存储时，如果有输入密码或之前有密码，保留/保存密码
         password: isSystemStorage
           ? undefined
-          : (hasTypedPassword ? rawPassword : initialData?.password),
+          : hasTypedPassword
+            ? rawPassword
+            : initialData?.password,
         hasPassword: nextHasPassword,
         database: formData.database.trim() === '' ? undefined : formData.database.trim(),
       };

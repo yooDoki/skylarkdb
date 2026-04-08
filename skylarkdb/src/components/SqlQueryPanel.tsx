@@ -323,7 +323,7 @@ export function SqlQueryPanel() {
     }
   }, []);
 
-  const useHistoryItem = useCallback(
+  const handleUseHistoryItem = useCallback(
     (query: string) => {
       if (activeTab) {
         updateTab(activeTab.id, { query });
@@ -486,9 +486,7 @@ export function SqlQueryPanel() {
                       size="icon"
                       className="h-9 w-9 shrink-0"
                       title="新建数据库"
-                      disabled={
-                        isReadOnly || loadingDatabases || !activeConnection.connection?.id
-                      }
+                      disabled={isReadOnly || loadingDatabases || !activeConnection.connection?.id}
                       onClick={() => setShowCreateDatabase(true)}
                     >
                       <FolderPlus className="h-4 w-4" />
@@ -580,7 +578,7 @@ export function SqlQueryPanel() {
                     <div
                       key={idx}
                       className="flex items-start gap-3 p-3 hover:bg-muted/50 cursor-pointer transition-colors"
-                      onClick={() => useHistoryItem(item.query)}
+                      onClick={() => handleUseHistoryItem(item.query)}
                     >
                       <div className="flex-1 min-w-0">
                         <code className="text-xs font-mono line-clamp-2 break-all">
