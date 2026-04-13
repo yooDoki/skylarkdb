@@ -1,7 +1,7 @@
 import { memo, useCallback, useState } from 'react';
 import { DatabaseConnection, ConnectionStatus } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Database, Server, Play, Power, Trash2, MoreVertical, Copy } from 'lucide-react';
+import { Database, Server, Play, Power, Trash2, MoreVertical, Copy, Pencil } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
 interface ConnectionItemProps {
@@ -202,6 +202,13 @@ export const ConnectionItem = memo(function ConnectionItem({
           </Button>
           {showMenu && (
             <div className="absolute right-0 top-full mt-0.5 w-28 py-0.5 bg-popover border border-border rounded-md shadow-lg z-50">
+              <button
+                className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] hover:bg-muted transition-colors"
+                onClick={handleEdit}
+              >
+                <Pencil className="h-3 w-3" />
+                编辑
+              </button>
               <button
                 className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] hover:bg-muted transition-colors"
                 onClick={handleDuplicate}
