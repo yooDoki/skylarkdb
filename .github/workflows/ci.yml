@@ -60,6 +60,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: ./skylarkdb
           includeRelease: ${{ github.ref_type == 'tag' }}
@@ -93,15 +94,90 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          ASSETS=$(gh release view ${{ steps.get_version.outputs.tag }} --json assets --jq '.assets[] | select(.name | endswith(".app.tar.gz")) | .name + "|" + .browser_download_url' | head -1)
-          if [ -n "$ASSETS" ]; then
-            FILENAME=$(echo "$ASSETS" | cut -d'|' -f1)
-            URL=$(echo "$ASSETS" | cut -d'|' -f2)
-            echo "darwin_url=$URL" >> $GITHUB_OUTPUT
-          fi
+          set -euo pipefail
+
+          RELEASE_ASSETS_JSON="$(gh release view ${{ steps.get_version.outputs.tag }} --json assets)"
+
+          # Prefer deterministic matching by filename tokens, not "first match".
+          # We match both the payload asset and its .sig sidecar.
+          get_url_by_name_regex() {
+            local name_regex="$1"
+            echo "$RELEASE_ASSETS_JSON" | jq -r --arg re "$name_regex" '
+              .assets[]
+              | select(.name | test($re))
+              | .browser_download_url
+            ' | head -n 1
+          }
+
+          get_name_by_url_regex() {
+            local name_regex="$1"
+            echo "$RELEASE_ASSETS_JSON" | jq -r --arg re "$name_regex" '
+              .assets[]
+              | select(.name | test($re))
+              | .name
+            ' | head -n 1
+          }
+
+          read_sig_from_url() {
+            local sig_url="$1"
+            if [ -z "${sig_url:-}" ] || [ "$sig_url" = "null" ]; then
+              echo ""
+              return 0
+            fi
+            curl -fsSL "$sig_url" | tr -d '\n\r'
+          }
+
+          export_pair() {
+            local key_prefix="$1"
+            local asset_name_re="$2"
+            local sig_name_re="$3"
+
+            local url sig_url sig
+            url="$(get_url_by_name_regex "$asset_name_re" || true)"
+            sig_url="$(get_url_by_name_regex "$sig_name_re" || true)"
+            sig="$(read_sig_from_url "$sig_url")"
+
+            if [ -n "${url:-}" ] && [ "$url" != "null" ]; then
+              echo "${key_prefix}_url=$url" >> $GITHUB_OUTPUT
+              echo "${key_prefix}_signature=$sig" >> $GITHUB_OUTPUT
+              echo "${key_prefix}_asset_name=$(get_name_by_url_regex "$asset_name_re" || true)" >> $GITHUB_OUTPUT
+              echo "${key_prefix}_sig_asset_name=$(get_name_by_url_regex "$sig_name_re" || true)" >> $GITHUB_OUTPUT
+            fi
+          }
+
+          # macOS updater payload is .app.tar.gz. Support both Apple Silicon and Intel if present.
+          # Common names observed: SkylarkDB_aarch64.app.tar.gz / SkylarkDB_x64.app.tar.gz / SkylarkDB_x86_64.app.tar.gz
+          export_pair "darwin_aarch64" "(^|/)SkylarkDB_.*(aarch64|arm64).*\\.app\\.tar\\.gz$" "(^|/)SkylarkDB_.*(aarch64|arm64).*\\.app\\.tar\\.gz\\.sig$"
+          export_pair "darwin_x86_64" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.app\\.tar\\.gz$" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.app\\.tar\\.gz\\.sig$"
+
+          # Windows prefer MSI; common: SkylarkDB_0.2.0_x64_en-US.msi
+          export_pair "windows_x86_64" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.msi$" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.msi\\.sig$"
+
+          # Linux prefer AppImage; common: SkylarkDB_0.2.0_amd64.AppImage
+          export_pair "linux_x86_64" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.AppImage$" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.AppImage\\.sig$"
 
       - name: Update latest.json
         run: |
+          set -euo pipefail
+
+          # Fail fast if signatures are missing for platforms that have URLs.
+          if [ -n "${{ steps.assets.outputs.darwin_aarch64_url }}" ] && [ -z "${{ steps.assets.outputs.darwin_aarch64_signature }}" ]; then
+            echo "ERROR: macOS (aarch64) updater signature missing. asset=${{ steps.assets.outputs.darwin_aarch64_asset_name }} sig=${{ steps.assets.outputs.darwin_aarch64_sig_asset_name }}" >&2
+            exit 1
+          fi
+          if [ -n "${{ steps.assets.outputs.darwin_x86_64_url }}" ] && [ -z "${{ steps.assets.outputs.darwin_x86_64_signature }}" ]; then
+            echo "ERROR: macOS (x86_64) updater signature missing. asset=${{ steps.assets.outputs.darwin_x86_64_asset_name }} sig=${{ steps.assets.outputs.darwin_x86_64_sig_asset_name }}" >&2
+            exit 1
+          fi
+          if [ -n "${{ steps.assets.outputs.windows_x86_64_url }}" ] && [ -z "${{ steps.assets.outputs.windows_x86_64_signature }}" ]; then
+            echo "ERROR: Windows updater signature missing. asset=${{ steps.assets.outputs.windows_x86_64_asset_name }} sig=${{ steps.assets.outputs.windows_x86_64_sig_asset_name }}" >&2
+            exit 1
+          fi
+          if [ -n "${{ steps.assets.outputs.linux_x86_64_url }}" ] && [ -z "${{ steps.assets.outputs.linux_x86_64_signature }}" ]; then
+            echo "ERROR: Linux updater signature missing. asset=${{ steps.assets.outputs.linux_x86_64_asset_name }} sig=${{ steps.assets.outputs.linux_x86_64_sig_asset_name }}" >&2
+            exit 1
+          fi
+
           cat > latest.json << 'EOF'
           {
             "version": "${{ steps.get_version.outputs.version }}",
@@ -109,17 +185,28 @@ jobs:
             "pub_date": "$(date -u '+%Y-%m-%dT%H:%M:%S+00:00')",
             "platforms": {
               "darwin-aarch64": {
-                "url": "${{ steps.assets.outputs.darwin_url }}",
-                "signature": ""
+                "url": "${{ steps.assets.outputs.darwin_aarch64_url }}",
+                "signature": "${{ steps.assets.outputs.darwin_aarch64_signature }}"
+              },
+              "darwin-x86_64": {
+                "url": "${{ steps.assets.outputs.darwin_x86_64_url }}",
+                "signature": "${{ steps.assets.outputs.darwin_x86_64_signature }}"
+              },
+              "windows-x86_64": {
+                "url": "${{ steps.assets.outputs.windows_x86_64_url }}",
+                "signature": "${{ steps.assets.outputs.windows_x86_64_signature }}"
+              },
+              "linux-x86_64": {
+                "url": "${{ steps.assets.outputs.linux_x86_64_url }}",
+                "signature": "${{ steps.assets.outputs.linux_x86_64_signature }}"
               }
             }
           }
           EOF
 
-      - name: Commit and push
+      - name: Upload latest.json to Release
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add latest.json
-          git diff --cached --quiet || git commit -m "chore: 更新 latest.json 到 v${{ steps.get_version.outputs.version }}"
-          git push
+          set -euo pipefail
+          gh release upload ${{ steps.get_version.outputs.tag }} latest.json --clobber

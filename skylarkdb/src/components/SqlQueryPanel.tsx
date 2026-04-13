@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { useQueryStore, QueryHistoryItem } from '@/stores/queryStore';
 import { MySQLTable, MySQLColumn, TableData, MySQLRoutine } from '@/types';
@@ -78,6 +79,7 @@ export function SqlQueryPanel() {
   const [showCreateDatabase, setShowCreateDatabase] = useState(false);
 
   const loadingRef = useRef(false);
+  const resultScrollRef = useRef<HTMLDivElement>(null);
   const currentDatabase = selectedDatabase || activeConnection.connection?.database || null;
 
   const loadDatabases = useCallback(async () => {
@@ -244,6 +246,14 @@ export function SqlQueryPanel() {
       return sortDirection === 'asc' ? cmp : -cmp;
     });
   }, [activeTab?.result?.rows, sortColumn, sortDirection]);
+
+  // Virtual scrolling for query results
+  const resultVirtualizer = useVirtualizer({
+    count: sortedRows.length,
+    getScrollElement: () => resultScrollRef.current,
+    estimateSize: () => 36,
+    overscan: 10,
+  });
 
   const handleSort = useCallback(
     (column: string) => {
@@ -699,6 +709,78 @@ export function SqlQueryPanel() {
             {activeTab.result!.columns.length === 0 ? (
               <div className="flex items-center justify-center h-full text-muted-foreground">
                 执行成功，无返回数据
+              </div>
+            ) : sortedRows.length > 100 ? (
+              <div ref={resultScrollRef} className="h-full overflow-auto">
+                <Table>
+                  <TableHeader className="bg-muted/50 sticky top-0 z-10">
+                    <TableRow>
+                      {activeTab.result!.columns.map(col => (
+                        <TableHead
+                          key={col}
+                          className="font-semibold text-xs whitespace-nowrap cursor-pointer hover:bg-muted transition-colors select-none"
+                          onClick={() => handleSort(col)}
+                        >
+                          <div className="flex items-center gap-1">
+                            <span>{col}</span>
+                            {sortColumn === col &&
+                              (sortDirection === 'asc' ? (
+                                <ChevronUp className="h-3 w-3" />
+                              ) : (
+                                <ChevronDown className="h-3 w-3" />
+                              ))}
+                          </div>
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                </Table>
+                <div
+                  style={{
+                    height: `${resultVirtualizer.getTotalSize()}px`,
+                    width: '100%',
+                    position: 'relative',
+                  }}
+                >
+                  {resultVirtualizer.getVirtualItems().map(virtualRow => {
+                    const row = sortedRows[virtualRow.index];
+                    return (
+                      <div
+                        key={virtualRow.index}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: `${virtualRow.size}px`,
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        <TableRow className="hover:bg-muted/30 transition-colors flex w-full">
+                          {activeTab.result!.columns.map(col => (
+                            <TableCell
+                              key={col}
+                              className="text-sm font-mono max-w-[300px] flex-1 min-w-[80px]"
+                            >
+                              <div
+                                className="truncate"
+                                title={row[col] !== null ? String(row[col]) : 'NULL'}
+                              >
+                                {row[col] === null ? (
+                                  <span className="text-muted-foreground italic">NULL</span>
+                                ) : typeof row[col] === 'object' ? (
+                                  JSON.stringify(row[col])
+                                ) : (
+                                  String(row[col])
+                                )}
+                              </div>
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
               <div className="h-full overflow-auto">

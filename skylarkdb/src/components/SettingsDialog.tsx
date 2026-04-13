@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
+import { check, Update } from '@tauri-apps/plugin-updater';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
 import {
@@ -15,12 +16,34 @@ import { Settings, Cpu, Monitor, Heart } from 'lucide-react';
 export function SettingsDialog() {
   const [open, setOpen] = useState(false);
   const [appVersion, setAppVersion] = useState('');
+  const [prefetchedUpdate, setPrefetchedUpdate] = useState<Update | null>(null);
 
   useEffect(() => {
     if (open && !appVersion) {
       getVersion().then(v => setAppVersion(v)).catch(() => setAppVersion('0.1.8'));
     }
   }, [open, appVersion]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const update = await check();
+        if (!cancelled) setPrefetchedUpdate(update);
+      } catch {
+        if (!cancelled) setPrefetchedUpdate(null);
+      }
+    };
+
+    run();
+    const timer = window.setInterval(run, 1000 * 60 * 60 * 6);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   return (
     <>
@@ -31,7 +54,15 @@ export function SettingsDialog() {
         className="h-9 w-9 rounded-full hover:bg-muted transition-colors"
         title="设置"
       >
-        <Settings className="h-4 w-4" />
+        <span className="relative inline-flex">
+          <Settings className="h-4 w-4" />
+          {!!prefetchedUpdate && (
+            <span
+              className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary ring-2 ring-background"
+              aria-label="发现新版本"
+            />
+          )}
+        </span>
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -85,7 +116,12 @@ export function SettingsDialog() {
                 更新
               </Label>
               <div className="rounded-lg border border-border/70 bg-background/80 px-4 py-3 shadow-sm">
-                <UpdateChecker />
+                <UpdateChecker
+                  initialUpdate={prefetchedUpdate}
+                  onUpdateAvailableChange={(available) => {
+                    if (!available) setPrefetchedUpdate(null);
+                  }}
+                />
               </div>
             </div>
 

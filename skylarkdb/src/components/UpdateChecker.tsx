@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { check, Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { Button } from './ui/button';
@@ -13,13 +13,39 @@ import {
 import { RefreshCw, Download, ArrowUpCircle, Sparkles, Loader2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
-export function UpdateChecker() {
+type UpdateCheckerProps = {
+  initialUpdate?: Update | null;
+  onUpdateAvailableChange?: (available: boolean) => void;
+};
+
+const DOWNLOADED_VERSION_KEY = 'skylarkdb.updater.downloadedVersion';
+
+export function UpdateChecker({ initialUpdate, onUpdateAvailableChange }: UpdateCheckerProps) {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<Update | null>(null);
   const [isChecking, setIsChecking] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloaded, setIsDownloaded] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [installProgress, setInstallProgress] = useState<string>('');
   const [checkResult, setCheckResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const downloadedVersion = useMemo(() => {
+    try {
+      return localStorage.getItem(DOWNLOADED_VERSION_KEY) || '';
+    } catch {
+      return '';
+    }
+  }, []);
+
+  useEffect(() => {
+    if (initialUpdate) {
+      setUpdateAvailable(true);
+      setUpdateInfo(initialUpdate);
+      setIsDownloaded(initialUpdate.version === downloadedVersion && downloadedVersion.length > 0);
+      onUpdateAvailableChange?.(true);
+    }
+  }, [downloadedVersion, initialUpdate, onUpdateAvailableChange]);
 
   const checkForUpdates = async () => {
     setIsChecking(true);
@@ -29,30 +55,35 @@ export function UpdateChecker() {
       if (update) {
         setUpdateAvailable(true);
         setUpdateInfo(update);
+        setIsDownloaded(update.version === downloadedVersion && downloadedVersion.length > 0);
+        onUpdateAvailableChange?.(true);
       } else {
         setCheckResult({ type: 'success', text: '当前已是最新版本' });
+        onUpdateAvailableChange?.(false);
       }
     } catch (error) {
       console.error('检查更新失败:', error);
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('Could not fetch') || msg.includes('release JSON')) {
-        setCheckResult({ type: 'error', text: '暂无可用更新（尚未发布新版本）' });
-      } else if (msg.includes('network') || msg.includes('fetch') || msg.includes('Failed')) {
+      if (msg.toLowerCase().includes('timed out') || msg.toLowerCase().includes('timeout')) {
+        setCheckResult({ type: 'error', text: '检查超时，请稍后重试' });
+      } else if (msg.includes('network') || msg.includes('fetch') || msg.includes('Failed') || msg.includes('Could not fetch')) {
         setCheckResult({ type: 'error', text: '网络连接失败，请检查网络后重试' });
+      } else if (msg.includes('release JSON') || msg.toLowerCase().includes('json')) {
+        setCheckResult({ type: 'error', text: '更新信息解析失败（发布端 latest.json 可能不符合格式）' });
       } else {
-        setCheckResult({ type: 'error', text: '检查失败，请稍后重试' });
+        setCheckResult({ type: 'error', text: `检查失败：${msg}` });
       }
     } finally {
       setIsChecking(false);
     }
   };
 
-  const handleInstall = async () => {
+  const handleDownload = async () => {
     if (!updateInfo) return;
-    setIsInstalling(true);
+    setIsDownloading(true);
     setInstallProgress('正在下载更新...');
     try {
-      await updateInfo.downloadAndInstall((event) => {
+      await updateInfo.download((event) => {
         switch (event.event) {
           case 'Started':
             setInstallProgress('正在下载更新...');
@@ -61,15 +92,38 @@ export function UpdateChecker() {
             setInstallProgress('正在下载更新...');
             break;
           case 'Finished':
-            setInstallProgress('下载完成，正在安装...');
+            setInstallProgress('下载完成，可在方便时重启更新');
             break;
         }
       });
+      setIsDownloaded(true);
+      try {
+        localStorage.setItem(DOWNLOADED_VERSION_KEY, updateInfo.version);
+      } catch {
+        // ignore
+      }
+    } catch (error) {
+      console.error('下载更新失败:', error);
+      const msg = error instanceof Error ? error.message : String(error);
+      setInstallProgress(`下载失败：${msg}`);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleRestartToUpdate = async () => {
+    if (!updateInfo) return;
+    setIsInstalling(true);
+    setInstallProgress('正在安装更新...');
+    try {
+      await updateInfo.install();
       setInstallProgress('安装完成，即将重启...');
       await relaunch();
     } catch (error) {
       console.error('安装更新失败:', error);
-      setInstallProgress('更新失败，请稍后重试');
+      const msg = error instanceof Error ? error.message : String(error);
+      setInstallProgress(`安装失败：${msg}`);
+    } finally {
       setIsInstalling(false);
     }
   };
@@ -104,7 +158,7 @@ export function UpdateChecker() {
       </div>
 
       <Dialog open={updateAvailable} onOpenChange={(open) => {
-        if (!isInstalling) setUpdateAvailable(open);
+        if (!isDownloading && !isInstalling) setUpdateAvailable(open);
       }}>
         <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
           {/* Header */}
@@ -143,9 +197,13 @@ export function UpdateChecker() {
             </div>
 
             {/* 安装进度 */}
-            {isInstalling && (
+            {(isDownloading || isInstalling || installProgress) && (
               <div className="flex items-center gap-2.5 rounded-lg border border-primary/20 bg-primary/[0.04] px-4 py-3">
-                <Loader2 className="h-4 w-4 text-primary animate-spin flex-shrink-0" />
+                {(isDownloading || isInstalling) ? (
+                  <Loader2 className="h-4 w-4 text-primary animate-spin flex-shrink-0" />
+                ) : (
+                  <Sparkles className="h-4 w-4 text-primary flex-shrink-0" />
+                )}
                 <span className="text-sm text-primary">{installProgress}</span>
               </div>
             )}
@@ -167,22 +225,22 @@ export function UpdateChecker() {
               <Button
                 variant="outline"
                 onClick={() => setUpdateAvailable(false)}
-                disabled={isInstalling}
+                disabled={isDownloading || isInstalling}
                 className="h-9 min-w-[80px] rounded-lg border-border/80 bg-background px-4"
               >
                 稍后
               </Button>
               <Button
-                onClick={handleInstall}
-                disabled={isInstalling}
+                onClick={isDownloaded ? handleRestartToUpdate : handleDownload}
+                disabled={isDownloading || isInstalling}
                 className="h-9 min-w-[80px] rounded-lg px-4 shadow-sm"
               >
-                {isInstalling ? (
+                {(isDownloading || isInstalling) ? (
                   <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
                 ) : (
                   <Download className="h-4 w-4 mr-1.5" />
                 )}
-                {isInstalling ? '更新中...' : '立即更新'}
+                {isDownloading ? '下载中...' : isInstalling ? '安装中...' : isDownloaded ? '重启更新' : '下载更新'}
               </Button>
             </DialogFooter>
           </div>

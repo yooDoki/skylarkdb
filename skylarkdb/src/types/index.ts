@@ -75,6 +75,8 @@ export interface TableData {
   executionTime: number;
   /** 非 SELECT（如 UPDATE/DELETE）时由后端返回 */
   affectedRows?: number;
+  /** Whether totalCount is approximate (from information_schema) rather than exact */
+  isApproximateCount?: boolean;
 }
 
 export interface RedisKey {

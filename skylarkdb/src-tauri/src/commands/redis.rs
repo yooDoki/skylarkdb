@@ -80,11 +80,7 @@ pub async fn set_redis_key(
 }
 
 #[command]
-pub async fn set_redis_key_ttl(
-    connection_id: String,
-    key: String,
-    ttl: i64,
-) -> Result<(), String> {
+pub async fn set_redis_key_ttl(connection_id: String, key: String, ttl: i64) -> Result<(), String> {
     redis::set_ttl(&connection_id, &key, ttl).await
 }
 

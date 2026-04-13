@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
+use crate::models::*;
 use crate::{
     database::{CONNECTION_CONFIGS, MYSQL_CONNECTIONS, MYSQL_DEFAULT_DATABASE},
     secrets,
 };
-use crate::models::*;
 use sqlx::{
     mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode},
     Column, Executor, Row,
@@ -98,17 +98,14 @@ pub async fn create_database(
             .ok_or("Connection not found")?
     };
 
-    sqlx::query(&sql)
-        .execute(&pool)
-        .await
-        .map_err(|e| {
-            let msg = e.to_string();
-            if msg.contains("1007") || msg.to_lowercase().contains("database exists") {
-                format!("创建失败：数据库「{}」已存在", name)
-            } else {
-                format!("创建数据库失败: {}", msg)
-            }
-        })?;
+    sqlx::query(&sql).execute(&pool).await.map_err(|e| {
+        let msg = e.to_string();
+        if msg.contains("1007") || msg.to_lowercase().contains("database exists") {
+            format!("创建失败：数据库「{}」已存在", name)
+        } else {
+            format!("创建数据库失败: {}", msg)
+        }
+    })?;
 
     Ok(())
 }
@@ -229,9 +226,7 @@ fn sanitize_connection_config(connection: &DatabaseConnection) -> DatabaseConnec
 
 async fn is_connection_read_only(connection_id: &str) -> Result<bool, String> {
     let configs = CONNECTION_CONFIGS.lock().await;
-    let connection = configs
-        .get(connection_id)
-        .ok_or("Connection not found")?;
+    let connection = configs.get(connection_id).ok_or("Connection not found")?;
     Ok(connection.read_only)
 }
 
@@ -253,16 +248,20 @@ fn query_allowed_in_read_only_mode(query: &str) -> bool {
         || upper.starts_with("WITH")
 }
 
-fn format_connect_error(prefix: &str, user: &str, host: &str, port: u16, raw_error: &str) -> String {
+fn format_connect_error(
+    prefix: &str,
+    user: &str,
+    host: &str,
+    port: u16,
+    raw_error: &str,
+) -> String {
     if raw_error.contains("1045") {
         return format!(
             "{prefix}: {raw_error}\n连接目标: user={user}, host={host}, port={port}\n排查建议: 1) 确认这套 MySQL 实例上该用户密码是否正确 2) 若使用 root，尝试将主机从 localhost 改为 127.0.0.1 3) 检查账号 host 限制（如 root@localhost 与 root@127.0.0.1）"
         );
     }
 
-    format!(
-        "{prefix}: {raw_error}\n连接目标: user={user}, host={host}, port={port}"
-    )
+    format!("{prefix}: {raw_error}\n连接目标: user={user}, host={host}, port={port}")
 }
 
 fn escape_mysql_like_pattern(s: &str) -> String {
@@ -362,7 +361,7 @@ pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult
         .port(connection.port)
         .username(username)
         .password(&password)
-        .statement_cache_capacity(0);
+        .statement_cache_capacity(100);
 
     if connection.ssl {
         opts = opts.ssl_mode(MySqlSslMode::Preferred);
@@ -381,9 +380,18 @@ pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult
         .min_connections(1)
         .acquire_timeout(std::time::Duration::from_secs(30))
         .idle_timeout(std::time::Duration::from_secs(600))
+        .max_lifetime(std::time::Duration::from_secs(1800))
         .connect_with(opts)
         .await
-        .map_err(|e| format_connect_error("Failed to connect", username, &connection.host, connection.port, &e.to_string()))?;
+        .map_err(|e| {
+            format_connect_error(
+                "Failed to connect",
+                username,
+                &connection.host,
+                connection.port,
+                &e.to_string(),
+            )
+        })?;
 
     {
         let mut connections = MYSQL_CONNECTIONS.lock().await;
@@ -404,7 +412,10 @@ pub async fn connect(connection: &DatabaseConnection) -> Result<ConnectionResult
 
     {
         let mut configs = CONNECTION_CONFIGS.lock().await;
-        configs.insert(connection.id.clone(), sanitize_connection_config(connection));
+        configs.insert(
+            connection.id.clone(),
+            sanitize_connection_config(connection),
+        );
     }
 
     Ok(ConnectionResult {
@@ -427,10 +438,7 @@ pub async fn test_connection(
         .as_deref()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or("root");
-    let pass = if let Some(pass) = password
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-    {
+    let pass = if let Some(pass) = password.as_deref().filter(|s| !s.trim().is_empty()) {
         pass.to_string()
     } else if use_stored_secret {
         if let Some(connection_id) = connection_id {
@@ -447,7 +455,7 @@ pub async fn test_connection(
         .port(port)
         .username(user)
         .password(&pass)
-        .statement_cache_capacity(0);
+        .statement_cache_capacity(10);
 
     if ssl {
         opts = opts.ssl_mode(MySqlSslMode::Preferred);
@@ -591,7 +599,17 @@ pub async fn get_columns(
     let columns: Vec<MySQLColumn> = rows
         .into_iter()
         .map(
-            |(name, data_type, nullable, default, extra, column_type, _charset, _collation, column_key)| {
+            |(
+                name,
+                data_type,
+                nullable,
+                default,
+                extra,
+                column_type,
+                _charset,
+                _collation,
+                column_key,
+            )| {
                 let full_type = column_type.clone();
                 let type_lower = data_type.to_lowercase();
                 let is_unsigned = full_type.to_lowercase().contains("unsigned");
@@ -758,24 +776,86 @@ pub async fn get_table_data(
         order_sql = Some(format!("ORDER BY `{}` {}", escape_mysql_ident(ob), dir));
     }
 
-    let mut count_query = format!(
-        "SELECT COUNT(*) as count FROM `{}`.`{}`",
-        database_name, table_name
-    );
-    if let Some(ref w) = where_sql {
-        count_query.push_str(" WHERE ");
-        count_query.push_str(w);
-    }
+    // For unfiltered queries, use approximate count from information_schema
+    // which is much faster on large InnoDB tables than SELECT COUNT(*)
+    let (total_count, is_approximate_count) = if where_sql.is_none() {
+        // Try approximate count from information_schema first
+        let approx_query = "SELECT TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?";
+        match sqlx::query(approx_query)
+            .bind(&database_name)
+            .bind(&table_name)
+            .fetch_optional(&pool)
+            .await
+        {
+            Ok(Some(row)) => {
+                // TABLE_ROWS can be i64 or NULL; try both i64 and u64
+                let approx: Option<i64> = row.try_get("TABLE_ROWS").ok();
+                if let Some(val) = approx {
+                    if val > 0 {
+                        (val, true)
+                    } else {
+                        // Fallback to exact COUNT(*) if approximate count is 0
+                        let count_query = format!(
+                            "SELECT COUNT(*) as count FROM `{}`.`{}`",
+                            database_name, table_name
+                        );
+                        let count_row = sqlx::query(&count_query)
+                            .fetch_one(&pool)
+                            .await
+                            .map_err(|e| format!("Failed to count rows: {}", e))?;
+                        let count: i64 = count_row.get("count");
+                        (count, false)
+                    }
+                } else {
+                    // TABLE_ROWS was NULL, fallback to exact count
+                    let count_query = format!(
+                        "SELECT COUNT(*) as count FROM `{}`.`{}`",
+                        database_name, table_name
+                    );
+                    let count_row = sqlx::query(&count_query)
+                        .fetch_one(&pool)
+                        .await
+                        .map_err(|e| format!("Failed to count rows: {}", e))?;
+                    let count: i64 = count_row.get("count");
+                    (count, false)
+                }
+            }
+            _ => {
+                // Fallback to exact COUNT(*) if information_schema query fails
+                let count_query = format!(
+                    "SELECT COUNT(*) as count FROM `{}`.`{}`",
+                    database_name, table_name
+                );
+                let count_row = sqlx::query(&count_query)
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| format!("Failed to count rows: {}", e))?;
+                let count: i64 = count_row.get("count");
+                (count, false)
+            }
+        }
+    } else {
+        // Filtered queries must use exact COUNT(*)
+        let mut count_query = format!(
+            "SELECT COUNT(*) as count FROM `{}`.`{}`",
+            database_name, table_name
+        );
+        if let Some(ref w) = where_sql {
+            count_query.push_str(" WHERE ");
+            count_query.push_str(w);
+        }
 
-    let mut count_q = sqlx::query(&count_query);
-    for b in &bind_params {
-        count_q = count_q.bind(b);
-    }
-    let count_row = count_q
-        .fetch_one(&pool)
-        .await
-        .map_err(|e| format!("Failed to count rows: {}", e))?;
-    let total_count: i64 = count_row.get("count");
+        let mut count_q = sqlx::query(&count_query);
+        for b in &bind_params {
+            count_q = count_q.bind(b);
+        }
+        let count_row = count_q
+            .fetch_one(&pool)
+            .await
+            .map_err(|e| format!("Failed to count rows: {}", e))?;
+        let count: i64 = count_row.get("count");
+        (count, false)
+    };
 
     let mut data_query = format!("SELECT * FROM `{}`.`{}`", database_name, table_name);
     if let Some(ref w) = where_sql {
@@ -833,6 +913,7 @@ pub async fn get_table_data(
         rows,
         total_count,
         execution_time,
+        is_approximate_count,
     })
 }
 
@@ -952,7 +1033,9 @@ pub async fn insert_record(
 
     let mut q = sqlx::query(&query);
     for col in &columns {
-        let val = obj.get(*col).ok_or_else(|| format!("Missing required column: {}", col))?;
+        let val = obj
+            .get(*col)
+            .ok_or_else(|| format!("Missing required column: {}", col))?;
         q = bind_value(q, val);
     }
 
@@ -1021,17 +1104,23 @@ pub async fn update_record(
     let mut q = sqlx::query(&query);
 
     for col in obj.keys().filter(|k| !locator.contains_key(*k)) {
-        let val = obj.get(col).ok_or_else(|| format!("Missing column value: {}", col))?;
+        let val = obj
+            .get(col)
+            .ok_or_else(|| format!("Missing column value: {}", col))?;
         q = bind_value(q, val);
     }
 
     for key in locator.keys() {
-        let val = locator.get(key).ok_or_else(|| format!("Missing locator value: {}", key))?;
+        let val = locator
+            .get(key)
+            .ok_or_else(|| format!("Missing locator value: {}", key))?;
         q = bind_value(q, val);
     }
 
     for key in locator.keys() {
-        let val = locator.get(key).ok_or_else(|| format!("Missing locator value: {}", key))?;
+        let val = locator
+            .get(key)
+            .ok_or_else(|| format!("Missing locator value: {}", key))?;
         q = bind_value(q, val);
     }
 
@@ -1087,7 +1176,9 @@ pub async fn delete_record(
 
     let mut q = sqlx::query(&query);
     for key in locator.keys() {
-        let val = locator.get(key).ok_or_else(|| format!("Missing locator key: {}", key))?;
+        let val = locator
+            .get(key)
+            .ok_or_else(|| format!("Missing locator key: {}", key))?;
         q = bind_value(q, val);
     }
 

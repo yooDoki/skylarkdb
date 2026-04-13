@@ -10,8 +10,11 @@ static PASSWORD_CACHE: Lazy<Arc<RwLock<HashMap<String, String>>>> =
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 fn password_entry(connection_id: &str) -> keyring::Entry {
-    keyring::Entry::new(SERVICE_NAME, &format!("connection-password:{}", connection_id))
-        .expect("failed to create keyring entry")
+    keyring::Entry::new(
+        SERVICE_NAME,
+        &format!("connection-password:{}", connection_id),
+    )
+    .expect("failed to create keyring entry")
 }
 
 fn secure_store_name() -> &'static str {
@@ -40,10 +43,7 @@ pub async fn get_connection_password(connection_id: &str) -> Result<Option<Strin
     {
         let cache = PASSWORD_CACHE.read().await;
         if let Some(password) = cache.get(connection_id) {
-            eprintln!(
-                "[secrets] cache hit for connection_id={}",
-                connection_id
-            );
+            eprintln!("[secrets] cache hit for connection_id={}", connection_id);
             return Ok(Some(password.clone()));
         }
     }
@@ -73,7 +73,11 @@ pub async fn get_connection_password(connection_id: &str) -> Result<Option<Strin
             );
             Ok(None)
         }
-        Err(error) => Err(format!("读取{}中的密码失败：{}", secure_store_name(), error)),
+        Err(error) => Err(format!(
+            "读取{}中的密码失败：{}",
+            secure_store_name(),
+            error
+        )),
     }
 }
 

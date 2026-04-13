@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { MySQLColumn, MySQLTable, TableData } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -69,8 +70,9 @@ import { DeleteTableDialog } from '@/components/DeleteTableDialog';
 import { AddColumnDialog } from '@/components/AddColumnDialog';
 import { ImportDataDialog } from '@/components/ImportDataDialog';
 
-const DEFAULT_PAGE_SIZE = 15;
-const PAGE_SIZE_OPTIONS = [15, 25, 50, 100, 200];
+const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [20, 25, 50, 100, 200, 500];
+const ESTIMATED_ROW_HEIGHT = 36;
 
 interface TableCache {
   data: TableData;
@@ -127,6 +129,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
   const editingRowData = useRef<TableRow | null>(null);
   const saveEditingRowRef = useRef<(row: TableRow) => Promise<void>>();
   const tableListRef = useRef<HTMLDivElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
 
   const CACHE_TIMEOUT = 5 * 60 * 1000;
 
@@ -896,6 +899,14 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
 
   const totalPages = Math.ceil((tableData?.totalCount || 0) / pageSize);
 
+  // Virtual scrolling for table data rows
+  const rowVirtualizer = useVirtualizer({
+    count: tableData?.rows?.length ?? 0,
+    getScrollElement: () => tableScrollRef.current,
+    estimateSize: () => ESTIMATED_ROW_HEIGHT,
+    overscan: 10,
+  });
+
   const renderCellContent = (value: unknown) => {
     if (value === null || value === undefined) {
       return (
@@ -1216,7 +1227,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                   <Table2 className="h-4 w-4 text-mysql flex-shrink-0" />
                   <span className="text-sm font-medium truncate">{viewingTable}</span>
                   <span className="text-[11px] text-muted-foreground">
-                    {tableData.totalCount.toLocaleString()} 条 · {tableData.columns.length} 列
+                    {tableData.isApproximateCount && '~'}{tableData.totalCount.toLocaleString()} 条 · {tableData.columns.length} 列
                   </span>
                   {isReadOnly && (
                     <Badge variant="outline" className="text-[9px] h-4 border-amber-300 text-amber-600">
@@ -1314,7 +1325,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
             )}
 
             {/* Table Data */}
-            <div className="min-h-0 flex-1 overflow-auto">
+            <div ref={tableScrollRef} className="min-h-0 flex-1 overflow-auto rounded-md border border-border/40 bg-background">
               {loading ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -1349,174 +1360,371 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {tableData.rows.map((row, rowIdx) => (
-                      <TableRow
-                        key={rowIdx}
-                        className="odd:bg-muted/[0.08] hover:bg-primary/[0.04]"
-                      >
-                        {tableData.columns.map((col, cellIdx) => {
-                          const rowKey = makeRowKey(row);
-                          const isEditingRow = !!rowKey && editingRowKey === rowKey;
-                          const columnMeta = currentTableColumns.find(
-                            column => column.name === col
-                          );
-                          const canEditCell =
-                            isEditingRow &&
-                            columnMeta &&
-                            !columnMeta.isPrimaryKey &&
-                            !columnMeta.isBlob &&
-                            !columnMeta.isBit &&
-                            !columnMeta.isGeometry;
-                          const isDoubleClickEditable =
-                            !isEditingRow &&
-                            canUpdateRows &&
-                            rowKey &&
-                            columnMeta &&
-                            !columnMeta.isPrimaryKey &&
-                            !columnMeta.isBlob &&
-                            !columnMeta.isBit &&
-                            !columnMeta.isGeometry;
+                    {tableData.rows.length > 100 ? (
+                      <tr>
+                        <td colSpan={tableData.columns.length + (hasRowActions ? 1 : 0)} style={{ padding: 0, border: 'none' }}>
+                          <div
+                            style={{
+                              height: `${rowVirtualizer.getTotalSize()}px`,
+                              width: '100%',
+                              position: 'relative',
+                            }}
+                          >
+                            {rowVirtualizer.getVirtualItems().map(virtualRow => {
+                              const row = tableData.rows[virtualRow.index];
+                              if (!row) return null;
+                              const rowKey = makeRowKey(row);
+                              const isEditingRow = !!rowKey && editingRowKey === rowKey;
 
-                          const handleInputKeyDown = (
-                            e: React.KeyboardEvent<HTMLInputElement>
-                          ) => {
-                            if (e.key === 'Tab') {
-                              e.preventDefault();
-                              const cols = editableColumns.map(c => c.name);
-                              const currentIdx = cols.indexOf(col);
-                              if (e.shiftKey) {
-                                if (currentIdx > 0)
-                                  setEditingFocusColumn(cols[currentIdx - 1]);
-                              } else {
-                                if (currentIdx < cols.length - 1) {
-                                  setEditingFocusColumn(cols[currentIdx + 1]);
-                                } else if (editingRowData.current) {
+                              return (
+                                <div
+                                  key={virtualRow.key}
+                                  data-index={virtualRow.index}
+                                  style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '100%',
+                                    height: `${virtualRow.size}px`,
+                                    transform: `translateY(${virtualRow.start}px)`,
+                                  }}
+                                  className={cn(
+                                    'flex items-center border-b border-border/30 hover:bg-primary/[0.04]',
+                                    virtualRow.index % 2 === 1 && 'bg-muted/[0.08]',
+                                    isEditingRow && 'bg-primary/[0.06]'
+                                  )}
+                                >
+                                  {tableData.columns.map((col, cellIdx) => {
+                                    const columnMeta = currentTableColumns.find(c => c.name === col);
+                                    const canEditCell =
+                                      isEditingRow &&
+                                      columnMeta &&
+                                      !columnMeta.isPrimaryKey &&
+                                      !columnMeta.isBlob &&
+                                      !columnMeta.isBit &&
+                                      !columnMeta.isGeometry;
+                                    const isDoubleClickEditable =
+                                      !isEditingRow &&
+                                      canUpdateRows &&
+                                      rowKey &&
+                                      columnMeta &&
+                                      !columnMeta.isPrimaryKey &&
+                                      !columnMeta.isBlob &&
+                                      !columnMeta.isBit &&
+                                      !columnMeta.isGeometry;
+
+                                    const handleInputKeyDown = (
+                                      e: React.KeyboardEvent<HTMLInputElement>
+                                    ) => {
+                                      if (e.key === 'Tab') {
+                                        e.preventDefault();
+                                        const cols = editableColumns.map(c => c.name);
+                                        const currentIdx = cols.indexOf(col);
+                                        if (e.shiftKey) {
+                                          if (currentIdx > 0)
+                                            setEditingFocusColumn(cols[currentIdx - 1]);
+                                        } else {
+                                          if (currentIdx < cols.length - 1) {
+                                            setEditingFocusColumn(cols[currentIdx + 1]);
+                                          } else if (editingRowData.current) {
+                                            void saveEditingRowRef.current!(editingRowData.current);
+                                          }
+                                        }
+                                      }
+                                      if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (editingRowData.current) {
+                                          void saveEditingRowRef.current!(editingRowData.current);
+                                        }
+                                      }
+                                    };
+
+                                    return (
+                                      <div
+                                        key={cellIdx}
+                                        className={cn(
+                                          'min-w-[140px] whitespace-nowrap py-1.5 px-3 text-xs flex items-center',
+                                          isDoubleClickEditable &&
+                                            'cursor-pointer hover:bg-primary/[0.06] transition-colors'
+                                        )}
+                                        onDoubleClick={() => {
+                                          if (isDoubleClickEditable) {
+                                            startEditingRow(row, col);
+                                          }
+                                        }}
+                                      >
+                                        {canEditCell ? (
+                                          <Input
+                                            data-edit-col={col}
+                                            value={editingValues[col] ?? ''}
+                                            onChange={event =>
+                                              handleEditValueChange(col, event.target.value)
+                                            }
+                                            onKeyDown={handleInputKeyDown}
+                                            className="h-7 min-w-[160px] rounded px-2 font-mono text-xs"
+                                          />
+                                        ) : (
+                                          <div className="flex items-center gap-1.5">
+                                            {columnMeta?.isPrimaryKey && (
+                                              <KeyRound className="h-3 w-3 flex-shrink-0 text-amber-500" />
+                                            )}
+                                            {renderCellContent(row[col])}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                  {hasRowActions && (
+                                    <div className="sticky right-0 z-10 border-l border-border/30 bg-background py-1 text-xs w-20 flex items-center gap-0.5 px-0.5">
+                                      {(() => {
+                                        const isSavingRow = !!rowKey && savingRowKey === rowKey;
+
+                                        if (!rowKey) {
+                                          return <span className="text-muted-foreground text-[10px]">—</span>;
+                                        }
+
+                                        return isEditingRow ? (
+                                          <>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-6 px-1.5 text-[11px]"
+                                              disabled={isSavingRow}
+                                              onClick={() => void saveEditingRow(row)}
+                                            >
+                                              {isSavingRow ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                              ) : (
+                                                <Save className="h-3 w-3" />
+                                              )}
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-6 px-1.5 text-[11px]"
+                                              disabled={isSavingRow}
+                                              onClick={cancelEditingRow}
+                                            >
+                                              <X className="h-3 w-3" />
+                                            </Button>
+                                            {canDeleteRows && (
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 px-1.5 text-[11px] text-destructive hover:text-destructive"
+                                                disabled={isSavingRow}
+                                                onClick={() => void handleDeleteRow(row)}
+                                              >
+                                                <Trash2 className="h-3 w-3" />
+                                              </Button>
+                                            )}
+                                          </>
+                                        ) : (
+                                          <>
+                                            {canUpdateRows && (
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 px-1.5 text-[11px]"
+                                                disabled={savingRowKey !== null}
+                                                onClick={() => startEditingRow(row)}
+                                              >
+                                                <Pencil className="h-3 w-3" />
+                                              </Button>
+                                            )}
+                                            {canDeleteRows && (
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 px-1.5 text-[11px] text-destructive hover:text-destructive"
+                                                disabled={savingRowKey !== null}
+                                                onClick={() => void handleDeleteRow(row)}
+                                              >
+                                                <Trash2 className="h-3 w-3" />
+                                              </Button>
+                                            )}
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      tableData.rows.map((row, rowIdx) => (
+                        <TableRow
+                          key={rowIdx}
+                          className="odd:bg-muted/[0.08] hover:bg-primary/[0.04]"
+                        >
+                          {tableData.columns.map((col, cellIdx) => {
+                            const rowKey = makeRowKey(row);
+                            const isEditingRow = !!rowKey && editingRowKey === rowKey;
+                            const columnMeta = currentTableColumns.find(
+                              column => column.name === col
+                            );
+                            const canEditCell =
+                              isEditingRow &&
+                              columnMeta &&
+                              !columnMeta.isPrimaryKey &&
+                              !columnMeta.isBlob &&
+                              !columnMeta.isBit &&
+                              !columnMeta.isGeometry;
+                            const isDoubleClickEditable =
+                              !isEditingRow &&
+                              canUpdateRows &&
+                              rowKey &&
+                              columnMeta &&
+                              !columnMeta.isPrimaryKey &&
+                              !columnMeta.isBlob &&
+                              !columnMeta.isBit &&
+                              !columnMeta.isGeometry;
+
+                            const handleInputKeyDown = (
+                              e: React.KeyboardEvent<HTMLInputElement>
+                            ) => {
+                              if (e.key === 'Tab') {
+                                e.preventDefault();
+                                const cols = editableColumns.map(c => c.name);
+                                const currentIdx = cols.indexOf(col);
+                                if (e.shiftKey) {
+                                  if (currentIdx > 0)
+                                    setEditingFocusColumn(cols[currentIdx - 1]);
+                                } else {
+                                  if (currentIdx < cols.length - 1) {
+                                    setEditingFocusColumn(cols[currentIdx + 1]);
+                                  } else if (editingRowData.current) {
+                                    void saveEditingRowRef.current!(editingRowData.current);
+                                  }
+                                }
+                              }
+                              if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (editingRowData.current) {
                                   void saveEditingRowRef.current!(editingRowData.current);
                                 }
                               }
-                            }
-                            if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              if (editingRowData.current) {
-                                void saveEditingRowRef.current!(editingRowData.current);
-                              }
-                            }
-                          };
+                            };
 
-                          return (
-                            <TableCell
-                              key={cellIdx}
-                              className={cn(
-                                'min-w-[140px] whitespace-nowrap py-1.5 px-3 text-xs align-top',
-                                isDoubleClickEditable &&
-                                  'cursor-pointer hover:bg-primary/[0.06] transition-colors'
-                              )}
-                              onDoubleClick={() => {
-                                if (isDoubleClickEditable) {
-                                  startEditingRow(row, col);
-                                }
-                              }}
-                            >
-                              {canEditCell ? (
-                                <Input
-                                  data-edit-col={col}
-                                  value={editingValues[col] ?? ''}
-                                  onChange={event =>
-                                    handleEditValueChange(col, event.target.value)
+                            return (
+                              <TableCell
+                                key={cellIdx}
+                                className={cn(
+                                  'min-w-[140px] whitespace-nowrap py-1.5 px-3 text-xs align-top',
+                                  isDoubleClickEditable &&
+                                    'cursor-pointer hover:bg-primary/[0.06] transition-colors'
+                                )}
+                                onDoubleClick={() => {
+                                  if (isDoubleClickEditable) {
+                                    startEditingRow(row, col);
                                   }
-                                  onKeyDown={handleInputKeyDown}
-                                  className="h-7 min-w-[160px] rounded px-2 font-mono text-xs"
-                                />
-                              ) : (
-                                <div className="flex items-center gap-1.5">
-                                  {columnMeta?.isPrimaryKey && (
-                                    <KeyRound className="h-3 w-3 flex-shrink-0 text-amber-500" />
-                                  )}
-                                  {renderCellContent(row[col])}
-                                </div>
-                              )}
-                            </TableCell>
-                          );
-                        })}
-                        {hasRowActions && (
-                          <TableCell className="sticky right-0 z-10 border-l border-border/30 bg-background py-1 text-xs w-20">
-                            {(() => {
-                              const rowKey = makeRowKey(row);
-                              const isEditingRow = !!rowKey && editingRowKey === rowKey;
-                              const isSavingRow = !!rowKey && savingRowKey === rowKey;
-
-                              if (!rowKey) {
-                                return <span className="text-muted-foreground text-[10px]">—</span>;
-                              }
-
-                              return isEditingRow ? (
-                                <div className="flex items-center gap-0.5">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-1.5 text-[11px]"
-                                    disabled={isSavingRow}
-                                    onClick={() => void saveEditingRow(row)}
-                                  >
-                                    {isSavingRow ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <Save className="h-3 w-3" />
+                                }}
+                              >
+                                {canEditCell ? (
+                                  <Input
+                                    data-edit-col={col}
+                                    value={editingValues[col] ?? ''}
+                                    onChange={event =>
+                                      handleEditValueChange(col, event.target.value)
+                                    }
+                                    onKeyDown={handleInputKeyDown}
+                                    className="h-7 min-w-[160px] rounded px-2 font-mono text-xs"
+                                  />
+                                ) : (
+                                  <div className="flex items-center gap-1.5">
+                                    {columnMeta?.isPrimaryKey && (
+                                      <KeyRound className="h-3 w-3 flex-shrink-0 text-amber-500" />
                                     )}
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-1.5 text-[11px]"
-                                    disabled={isSavingRow}
-                                    onClick={cancelEditingRow}
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                  {canDeleteRows && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 px-1.5 text-[11px] text-destructive hover:text-destructive"
-                                      disabled={isSavingRow}
-                                      onClick={() => void handleDeleteRow(row)}
-                                    >
-                                      <Trash2 className="h-3 w-3" />
-                                    </Button>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-0.5">
-                                  {canUpdateRows && (
+                                    {renderCellContent(row[col])}
+                                  </div>
+                                )}
+                              </TableCell>
+                            );
+                          })}
+                          {hasRowActions && (
+                            <TableCell className="sticky right-0 z-10 border-l border-border/30 bg-background py-1 text-xs w-20">
+                              {(() => {
+                                const rowKey = makeRowKey(row);
+                                const isEditingRow = !!rowKey && editingRowKey === rowKey;
+                                const isSavingRow = !!rowKey && savingRowKey === rowKey;
+
+                                if (!rowKey) {
+                                  return <span className="text-muted-foreground text-[10px]">—</span>;
+                                }
+
+                                return isEditingRow ? (
+                                  <div className="flex items-center gap-0.5">
                                     <Button
                                       variant="ghost"
                                       size="sm"
                                       className="h-6 px-1.5 text-[11px]"
-                                      disabled={savingRowKey !== null}
-                                      onClick={() => startEditingRow(row)}
+                                      disabled={isSavingRow}
+                                      onClick={() => void saveEditingRow(row)}
                                     >
-                                      <Pencil className="h-3 w-3" />
+                                      {isSavingRow ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <Save className="h-3 w-3" />
+                                      )}
                                     </Button>
-                                  )}
-                                  {canDeleteRows && (
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-6 px-1.5 text-[11px] text-destructive hover:text-destructive"
-                                      disabled={savingRowKey !== null}
-                                      onClick={() => void handleDeleteRow(row)}
+                                      className="h-6 px-1.5 text-[11px]"
+                                      disabled={isSavingRow}
+                                      onClick={cancelEditingRow}
                                     >
-                                      <Trash2 className="h-3 w-3" />
+                                      <X className="h-3 w-3" />
                                     </Button>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    ))}
+                                    {canDeleteRows && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 px-1.5 text-[11px] text-destructive hover:text-destructive"
+                                        disabled={isSavingRow}
+                                        onClick={() => void handleDeleteRow(row)}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-0.5">
+                                    {canUpdateRows && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 px-1.5 text-[11px]"
+                                        disabled={savingRowKey !== null}
+                                        onClick={() => startEditingRow(row)}
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                    {canDeleteRows && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 px-1.5 text-[11px] text-destructive hover:text-destructive"
+                                        disabled={savingRowKey !== null}
+                                        onClick={() => void handleDeleteRow(row)}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               )}

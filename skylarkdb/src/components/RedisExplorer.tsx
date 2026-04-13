@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { RedisKey, RedisInfo } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -61,6 +62,16 @@ export function RedisExplorer() {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+
+  const keysListRef = useRef<HTMLDivElement>(null);
+
+  // Virtual scrolling for key list
+  const keyVirtualizer = useVirtualizer({
+    count: keys.length,
+    getScrollElement: () => keysListRef.current,
+    estimateSize: () => 56,
+    overscan: 8,
+  });
 
   useEffect(() => {
     if (activeConnection.status === 'connected' && activeConnection.connection) {
@@ -491,63 +502,141 @@ export function RedisExplorer() {
             </div>
           )}
         </div>
-        <div className="flex-1 min-h-0 overflow-auto px-2 py-1">
-          <div className="space-y-0.5">
-            {keys.map(key => (
-              <div
-                key={key.key}
-                className={cn(
-                  'group flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer text-xs transition-colors',
-                  selectedKey === key.key
-                    ? 'bg-redis/10 text-redis'
-                    : 'hover:bg-muted/60'
-                )}
-                onClick={() => {
-                  if (isSelectMode) {
-                    toggleKeySelection(key.key);
-                  } else {
-                    handleKeyClick(key.key);
-                  }
-                }}
-              >
-                {isSelectMode && (
-                  <input
-                    type="checkbox"
-                    checked={selectedKeys.has(key.key)}
-                    onChange={() => toggleKeySelection(key.key)}
-                    onClick={e => e.stopPropagation()}
-                    className="h-3 w-3 rounded border-border"
-                  />
-                )}
-                {getTypeIcon(key.type)}
-                <div className="flex-1 min-w-0">
-                  <div className="truncate font-medium">{key.key}</div>
-                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                    {getTypeBadge(key.type)}
-                    <span>{formatBytes(key.size)}</span>
-                    {key.ttl !== -1 && (
-                      <span className="flex items-center gap-0.5">
-                        <Clock className="h-2.5 w-2.5" />
-                        {formatTTL(key.ttl)}
-                      </span>
+        <div ref={keysListRef} className="flex-1 min-h-0 overflow-auto px-2 py-1">
+          {keys.length > 50 ? (
+            <div
+              style={{
+                height: `${keyVirtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {keyVirtualizer.getVirtualItems().map(virtualItem => {
+                const key = keys[virtualItem.index];
+                if (!key) return null;
+
+                return (
+                  <div
+                    key={virtualItem.key}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: `${virtualItem.size}px`,
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                    className={cn(
+                      'group flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer text-xs transition-colors',
+                      selectedKey === key.key
+                        ? 'bg-redis/10 text-redis'
+                        : 'hover:bg-muted/60'
                     )}
+                    onClick={() => {
+                      if (isSelectMode) {
+                        toggleKeySelection(key.key);
+                      } else {
+                        handleKeyClick(key.key);
+                      }
+                    }}
+                  >
+                    {isSelectMode && (
+                      <input
+                        type="checkbox"
+                        checked={selectedKeys.has(key.key)}
+                        onChange={() => toggleKeySelection(key.key)}
+                        onClick={e => e.stopPropagation()}
+                        className="h-3 w-3 rounded border-border"
+                      />
+                    )}
+                    {getTypeIcon(key.type)}
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate font-medium">{key.key}</div>
+                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        {getTypeBadge(key.type)}
+                        <span>{formatBytes(key.size)}</span>
+                        {key.ttl !== -1 && (
+                          <span className="flex items-center gap-0.5">
+                            <Clock className="h-2.5 w-2.5" />
+                            {formatTTL(key.ttl)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                      onClick={e => {
+                        e.stopPropagation();
+                        handleDeleteKey(key.key);
+                      }}
+                      disabled={isReadOnly}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
                   </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                  onClick={e => {
-                    e.stopPropagation();
-                    handleDeleteKey(key.key);
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-0.5">
+              {keys.map(key => (
+                <div
+                  key={key.key}
+                  className={cn(
+                    'group flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer text-xs transition-colors',
+                    selectedKey === key.key
+                      ? 'bg-redis/10 text-redis'
+                      : 'hover:bg-muted/60'
+                  )}
+                  onClick={() => {
+                    if (isSelectMode) {
+                      toggleKeySelection(key.key);
+                    } else {
+                      handleKeyClick(key.key);
+                    }
                   }}
-                  disabled={isReadOnly}
                 >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-            ))}
-          </div>
+                  {isSelectMode && (
+                    <input
+                      type="checkbox"
+                      checked={selectedKeys.has(key.key)}
+                      onChange={() => toggleKeySelection(key.key)}
+                      onClick={e => e.stopPropagation()}
+                      className="h-3 w-3 rounded border-border"
+                    />
+                  )}
+                  {getTypeIcon(key.type)}
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate font-medium">{key.key}</div>
+                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                      {getTypeBadge(key.type)}
+                      <span>{formatBytes(key.size)}</span>
+                      {key.ttl !== -1 && (
+                        <span className="flex items-center gap-0.5">
+                          <Clock className="h-2.5 w-2.5" />
+                          {formatTTL(key.ttl)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleDeleteKey(key.key);
+                    }}
+                    disabled={isReadOnly}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

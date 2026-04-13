@@ -159,6 +159,25 @@ export const useConnectionStore = create<ConnectionStore>()(
               status: 'disconnected',
               error: null,
             };
+            // 自动重连：延迟执行以确保 UI 已挂载
+            setTimeout(() => {
+              import('@/utils/api').then(({ connectMySQL, connectRedis }) => {
+                state.setConnectionStatus('connecting');
+                const doConnect = connection.type === 'mysql'
+                  ? connectMySQL(connection)
+                  : connectRedis(connection);
+                doConnect.then(result => {
+                  if (result.success) {
+                    state.setConnectionStatus('connected');
+                  } else {
+                    state.setConnectionStatus('error', result.message);
+                  }
+                }).catch((error: unknown) => {
+                  const errorMessage = error instanceof Error ? error.message : String(error);
+                  state.setConnectionStatus('error', errorMessage);
+                });
+              });
+            }, 300);
           }
         }
       },

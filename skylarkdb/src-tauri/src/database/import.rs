@@ -586,7 +586,8 @@ mod tests {
 
     #[test]
     fn test_parse_csv_with_quotes() {
-        let csv = "name,description\n\"Zhang San\",\"Hello, World\"\n\"Li Si\",\"Test \\\"quote\\\"\"\n";
+        let csv =
+            "name,description\n\"Zhang San\",\"Hello, World\"\n\"Li Si\",\"Test \\\"quote\\\"\"\n";
         let f = create_temp_csv(csv);
         let result = parse_csv_file(f.path());
         assert!(result.is_ok());
@@ -611,7 +612,10 @@ mod tests {
         assert_eq!(map_type_to_mysql("", Some("1000000")), "INT");
         assert_eq!(map_type_to_mysql("", Some("3.14")), "DOUBLE");
         assert_eq!(map_type_to_mysql("", Some("2026-01-15")), "DATE");
-        assert_eq!(map_type_to_mysql("", Some("2026-01-15 10:30:00")), "DATETIME");
+        assert_eq!(
+            map_type_to_mysql("", Some("2026-01-15 10:30:00")),
+            "DATETIME"
+        );
         assert_eq!(map_type_to_mysql("", Some("{\"key\": \"val\"}")), "JSON");
     }
 

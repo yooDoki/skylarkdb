@@ -125,6 +125,9 @@ pub struct TableDataResult {
     pub rows: Vec<serde_json::Value>,
     pub total_count: i64,
     pub execution_time: f64,
+    /// Whether total_count is approximate (from information_schema) or exact (from COUNT(*))
+    #[serde(default)]
+    pub is_approximate_count: bool,
 }
 
 /// Import/Export models
