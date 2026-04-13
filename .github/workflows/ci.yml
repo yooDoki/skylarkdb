@@ -67,3 +67,59 @@ jobs:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: ${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || '' }}
           releaseDraft: false
+
+  update-latest-json:
+    name: Update latest.json
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
+
+      - name: Get release assets
+        id: assets
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          ASSETS=$(gh release view ${{ steps.get_version.outputs.tag }} --json assets --jq '.assets[] | select(.name | endswith(".app.tar.gz")) | .name + "|" + .browser_download_url' | head -1)
+          if [ -n "$ASSETS" ]; then
+            FILENAME=$(echo "$ASSETS" | cut -d'|' -f1)
+            URL=$(echo "$ASSETS" | cut -d'|' -f2)
+            echo "darwin_url=$URL" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update latest.json
+        run: |
+          cat > latest.json << 'EOF'
+          {
+            "version": "${{ steps.get_version.outputs.version }}",
+            "notes": "## SkylarkDB v${{ steps.get_version.outputs.version }}\n\n请查看 Release 页面获取详细更新内容。",
+            "pub_date": "$(date -u '+%Y-%m-%dT%H:%M:%S+00:00')",
+            "platforms": {
+              "darwin-aarch64": {
+                "url": "${{ steps.assets.outputs.darwin_url }}",
+                "signature": ""
+              }
+            }
+          }
+          EOF
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add latest.json
+          git diff --cached --quiet || git commit -m "chore: 更新 latest.json 到 v${{ steps.get_version.outputs.version }}"
+          git push
