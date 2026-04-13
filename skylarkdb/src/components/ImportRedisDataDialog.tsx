@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { useConnectionStore } from '@/stores/connectionStore';
 import {
   Dialog,
@@ -47,17 +48,31 @@ export function ImportRedisDataDialog({
 }: ImportRedisDataDialogProps) {
   const { activeConnection } = useConnectionStore();
   const [filePath, setFilePath] = useState('');
+  const [fileName, setFileName] = useState('');
   const [format, setFormat] = useState<'json' | 'txt'>('json');
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const filePath = file.name;
-      setFilePath(filePath);
-      setError(null);
+  const handleFileSelect = async () => {
+    try {
+      const result = await openDialog({
+        multiple: false,
+        filters: [
+          {
+            name: `${format.toUpperCase()} 文件`,
+            extensions: [format],
+          },
+        ],
+      });
+
+      if (result) {
+        setFilePath(result);
+        const parts = result.replace(/\\/g, '/').split('/');
+        setFileName(parts[parts.length - 1]);
+        setError(null);
+      }
+    } catch (err) {
+      console.error('File selection error:', err);
     }
   };
 
@@ -80,6 +95,7 @@ export function ImportRedisDataDialog({
       onSuccess();
       onOpenChange(false);
       setFilePath('');
+      setFileName('');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       logError(errorMessage, 'Redis 数据导入失败');
@@ -141,9 +157,7 @@ export function ImportRedisDataDialog({
                     onClick={() => {
                       setFormat(key);
                       setFilePath('');
-                      if (fileInputRef.current) {
-                        fileInputRef.current.value = '';
-                      }
+                      setFileName('');
                     }}
                     disabled={isImporting}
                     className="relative flex flex-col items-center gap-2 rounded-lg border p-3 transition-all"
@@ -172,25 +186,17 @@ export function ImportRedisDataDialog({
               选择文件
             </Label>
             <div
-              onClick={() => fileInputRef.current?.click()}
-              className="group relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-all cursor-pointer"
+              onClick={handleFileSelect}
+              className="group relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-all cursor-pointer hover:border-redis/50"
             >
-              <input
-                ref={fileInputRef}
-                id="file"
-                type="file"
-                accept={`.${format}`}
-                onChange={handleFileSelect}
-                disabled={isImporting}
-                className="hidden"
-              />
               {filePath ? (
                 <div className="flex items-center gap-3 text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-redis/10">
                     <CheckCircle2 className="h-6 w-6 text-redis" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">{filePath}</p>
+                    <p className="text-sm font-medium text-foreground truncate max-w-[300px]" title={fileName}>{fileName}</p>
+                    <p className="text-xs text-muted-foreground truncate max-w-[300px]" title={filePath}>{filePath}</p>
                     <p className="text-xs text-muted-foreground">点击更换文件</p>
                   </div>
                 </div>
@@ -200,7 +206,7 @@ export function ImportRedisDataDialog({
                     <Upload className="h-7 w-7 text-muted-foreground group-hover:text-redis transition-colors" />
                   </div>
                   <p className="text-sm font-medium text-foreground mb-1">
-                    点击选择文件或拖拽文件到此处
+                    点击选择文件
                   </p>
                   <p className="text-xs text-muted-foreground">
                     仅支持 {currentFormat.extension.toUpperCase()} 格式文件

@@ -429,71 +429,7 @@
   -webkit-app-region: no-drag;
 }
 
-/* Windows 平台特定样式 */
-@supports (-webkit-app-region: drag) {
-  /* 确保标题栏在 Windows 上显示正确 */
-  .titlebar {
-    position: relative;
-    z-index: 9999;
-  }
-  
-  /* 窗口控制按钮样式优化 */
-  .titlebar-button {
-    position: relative;
-    overflow: hidden;
-  }
-  
-  /* 按钮悬停效果 */
-  .titlebar-button::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: currentColor;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-  }
-  
-  .titlebar-button:hover::after {
-    opacity: 0.1;
-  }
-  
-  /* 关闭按钮特殊样式 */
-  .titlebar-button-close:hover {
-    background-color: #e81123 !important;
-  }
-  
-  .titlebar-button-close:hover svg {
-    color: white !important;
-  }
-}
 
-/* 窗口最大化时的样式调整 */
-.window-maximized .titlebar {
-  padding-top: 0;
-}
-
-/* 确保内容区域不会被标题栏遮挡 */
-.content-area {
-  margin-top: 0;
-}
-
-/* 透明窗口背景处理 */
-.transparent-window {
-  background: transparent;
-}
-
-/* 毛玻璃效果增强 */
-.glass-titlebar {
-  background: hsl(var(--background) / 0.85);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-}
-
-/* 深色模式下的标题栏 */
-.dark .glass-titlebar {
-  background: hsl(var(--background) / 0.70);
-  border-bottom-color: hsl(var(--border) / 0.5);
-}
 
 /* 窗口边框发光效果（Windows 11 风格） */
 @supports (backdrop-filter: blur(12px)) {
@@ -586,22 +522,6 @@
 .no-select {
   user-select: none;
   -webkit-user-select: none;
-}
-
-/* 标题栏动画 */
-@keyframes titlebar-appear {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.titlebar-animate {
-  animation: titlebar-appear 0.2s ease-out;
 }
 
 /* ============================================

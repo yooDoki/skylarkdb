@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useConnectionStore } from '@/stores/connectionStore';
 import { CreateTableColumn } from '@/types';
 import { createMySQLTable } from '@/utils/api';
@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Trash2, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Loader2, AlertCircle, Code2 } from 'lucide-react';
 
 const MYSQL_TYPES = [
   'INT',
@@ -70,6 +70,24 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
   ]);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 表单重置
+  useEffect(() => {
+    if (!open) {
+      setTableName('');
+      setColumns([
+        {
+          name: '',
+          dataType: 'INT',
+          nullable: true,
+          defaultValue: undefined,
+          autoIncrement: false,
+          isPrimaryKey: false,
+        },
+      ]);
+      setError(null);
+    }
+  }, [open]);
 
   const handleColumnChange = useCallback(
     (index: number, field: keyof CreateTableColumn, value: unknown) => {
@@ -132,17 +150,6 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
         tableName.trim(),
         validColumns
       );
-      setTableName('');
-      setColumns([
-        {
-          name: '',
-          dataType: 'INT',
-          nullable: true,
-          defaultValue: undefined,
-          autoIncrement: false,
-          isPrimaryKey: false,
-        },
-      ]);
       onSuccess();
       onOpenChange(false);
     } catch (err) {
@@ -150,6 +157,21 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
     } finally {
       setIsCreating(false);
     }
+  };
+
+  const getSQLPreview = () => {
+    const validColumns = columns.filter(c => c.name);
+    if (validColumns.length === 0) return 'CREATE TABLE `table_name` (...)';
+
+    const columnDefs = validColumns.map(col => {
+      let def = `  \`${col.name}\` ${col.dataType}`;
+      if (!col.nullable) def += ' NOT NULL';
+      if (col.autoIncrement) def += ' AUTO_INCREMENT';
+      if (col.isPrimaryKey) def += ' PRIMARY KEY';
+      return def;
+    });
+
+    return `CREATE TABLE \`${tableName || 'table_name'}\` (\n${columnDefs.join(',\n')}\n)`;
   };
 
   const handleClose = () => {
@@ -171,30 +193,38 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
         </DialogHeader>
 
         <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
+          {error && (
+            <div className="flex items-start gap-2.5 p-3.5 border border-destructive/40 bg-destructive/8 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-destructive leading-relaxed">{error}</p>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <label className="text-sm font-medium">表名</label>
+            <label className="text-[13px] font-semibold text-foreground">表名</label>
             <Input
               value={tableName}
               onChange={e => setTableName(e.target.value)}
               placeholder="输入表名..."
-              className="font-mono"
+              className="font-mono h-10 rounded-lg border-border/80"
+              disabled={isReadOnly || isCreating}
             />
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">列定义</label>
-              <Button variant="outline" size="sm" onClick={addColumn} disabled={isReadOnly}>
+              <label className="text-[13px] font-semibold text-foreground">列定义</label>
+              <Button variant="outline" size="sm" onClick={addColumn} disabled={isReadOnly || isCreating} className="h-8">
                 <Plus className="h-3 w-3 mr-1" />
                 添加列
               </Button>
             </div>
 
-            <div className="space-y-2 max-h-[400px] overflow-auto">
+            <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
               {columns.map((col, index) => (
                 <div
                   key={index}
-                  className="flex items-start gap-2 p-3 border rounded-lg bg-muted/30"
+                  className="flex items-start gap-2 p-3 border border-border/80 rounded-lg bg-muted/30"
                 >
                   <div className="flex-1 grid grid-cols-5 gap-2">
                     <div className="col-span-1">
@@ -202,20 +232,22 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
                         placeholder="列名"
                         value={col.name}
                         onChange={e => handleColumnChange(index, 'name', e.target.value)}
-                        className="h-8 text-xs font-mono"
+                        className="h-8 text-xs font-mono rounded-lg"
+                        disabled={isCreating}
                       />
                     </div>
                     <div className="col-span-1">
                       <Select
                         value={col.dataType}
                         onValueChange={v => handleColumnChange(index, 'dataType', v)}
+                        disabled={isCreating}
                       >
-                        <SelectTrigger className="h-8 text-xs">
+                        <SelectTrigger className="h-8 text-xs rounded-lg">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {MYSQL_TYPES.map(type => (
-                            <SelectItem key={type} value={type}>
+                            <SelectItem key={type} value={type} className="font-mono text-xs">
                               {type}
                             </SelectItem>
                           ))}
@@ -227,6 +259,7 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
                         checked={!col.nullable}
                         onCheckedChange={v => handleColumnChange(index, 'nullable', !v)}
                         className="scale-75"
+                        disabled={isCreating}
                       />
                       <span className="text-xs text-muted-foreground">NOT NULL</span>
                     </div>
@@ -235,6 +268,7 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
                         checked={col.autoIncrement}
                         onCheckedChange={v => handleColumnChange(index, 'autoIncrement', v)}
                         className="scale-75"
+                        disabled={isCreating}
                       />
                       <span className="text-xs text-muted-foreground">AUTO_INC</span>
                     </div>
@@ -243,6 +277,7 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
                         checked={col.isPrimaryKey}
                         onCheckedChange={v => handleColumnChange(index, 'isPrimaryKey', v)}
                         className="scale-75"
+                        disabled={isCreating}
                       />
                       <span className="text-xs text-muted-foreground">PK</span>
                     </div>
@@ -250,9 +285,9 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 flex-shrink-0"
+                    className="h-8 w-8 flex-shrink-0 hover:bg-destructive/10"
                     onClick={() => removeColumn(index)}
-                    disabled={isReadOnly || columns.length === 1}
+                    disabled={isCreating || isReadOnly || columns.length === 1}
                   >
                     <Trash2 className="h-3 w-3 text-destructive" />
                   </Button>
@@ -261,48 +296,60 @@ export function CreateTableDialog({ open, onOpenChange, onSuccess }: CreateTable
             </div>
           </div>
 
-          {error && (
-            <div className="flex items-start gap-2 p-3 border border-destructive/50 bg-destructive/10 rounded-lg">
-              <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-destructive">{error}</p>
+          {/* SQL 预览 */}
+          <div className="rounded-lg border border-border/80 bg-slate-950 shadow-[0_8px_18px_rgba(15,23,42,0.28)]">
+            <div className="flex items-center gap-2 border-b border-slate-800 bg-slate-900/80 px-4 py-2.5">
+              <Code2 className="h-3.5 w-3.5 text-mysql" />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
+                SQL 预览
+              </span>
             </div>
-          )}
+            <div className="overflow-x-auto p-4">
+              <code className="block whitespace-pre-wrap break-all font-mono text-[13px] leading-7 text-emerald-300">
+                {getSQLPreview()}
+              </code>
+            </div>
+          </div>
 
-          <div className="p-3 border border-dashed rounded-lg bg-muted/20">
-            <p className="text-xs text-muted-foreground mb-2">SQL 预览:</p>
-            <code className="text-xs font-mono text-muted-foreground">
-              {`CREATE TABLE \`${tableName || 'table_name'}\` (\n`}
-              {columns
-                .filter(c => c.name)
-                .map((col, i) => (
-                  <span key={i}>
-                    {'  '}
-                    {col.name} {col.dataType}
-                    {!col.nullable ? ' NOT NULL' : ''}
-                    {col.autoIncrement ? ' AUTO_INCREMENT' : ''}
-                    {col.isPrimaryKey ? ' (PRIMARY KEY)' : ''}
-                    {i < columns.filter(c => c.name).length - 1 ? ',' : ''}
-                    {'\n'}
-                  </span>
-                ))}
-              {')'}
-            </code>
+          {/* 提示信息 */}
+          <div className="rounded-lg border border-border/50 bg-muted/20 p-3 text-xs text-muted-foreground leading-relaxed">
+            <p className="flex items-center gap-1.5">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+              提示: 按 <kbd className="px-1.5 py-0.5 rounded bg-background border border-border text-[10px] font-mono">Ctrl/⌘ + Enter</kbd> 快速提交
+            </p>
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
-            取消
-          </Button>
-          <Button
-            onClick={handleCreate}
-            disabled={isCreating || isReadOnly}
-            className="bg-mysql hover:bg-mysql/90"
-          >
-            {isCreating && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            创建表
-          </Button>
-        </DialogFooter>
+        {/* Footer */}
+        <div className="border-t border-border/70 bg-muted/[0.08] px-5 py-3.5">
+          <DialogFooter className="gap-2.5">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isCreating}
+              className="h-9 min-w-[80px] rounded-lg border-border/80 bg-background px-4"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={isCreating || isReadOnly}
+              className="h-9 min-w-[80px] rounded-lg px-4 bg-mysql hover:bg-mysql/90 shadow-[0_8px_18px_-10px_rgba(0,112,192,0.55)]"
+            >
+              {isCreating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  创建中...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  创建表
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

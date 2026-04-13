@@ -8,7 +8,7 @@
   },
   "identifier": "com.skylarkdb.app",
   "productName": "SkylarkDB",
-  "version": "0.1.8",
+  "version": "0.2.0",
   "app": {
     "security": {
       "csp": null
@@ -64,8 +64,8 @@
       "endpoints": [
         "https://github.com/yooDoki/skylarkdb/releases/latest/download/latest.json"
       ],
-      "dialog": true,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlBQzVDRDNGRTNCNzI4MUEKUldRYUtMZmpQODNGbXZVQVkrSXIxdUNzVm9EVVo1Qmc0TnBDZ29WY1A3bDM2c0tmQzY5ZGxucEYK"
+      "dialog": false,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY5RjVGMUJGMTE4NDRGQTYKUldTbVQ0UVJ2L0gxYVVvSFpTMmtyYW5oekdsZVh6eFU0RGJFc3hJU1pwR0xSM0hkZWljTU1sRmkK"
     }
   }
 }

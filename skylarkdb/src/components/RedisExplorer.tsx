@@ -3,7 +3,6 @@ import { useConnectionStore } from '@/stores/connectionStore';
 import { RedisKey, RedisInfo } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   Server,
@@ -152,6 +151,9 @@ export function RedisExplorer() {
         }
         const infoData = await getRedisInfo(activeConnection.connection.id);
         setRedisInfo(infoData);
+        alert(`键 "${key}" 已删除`);
+      } else {
+        alert(`键 "${key}" 不存在或删除失败`);
       }
     } catch (error) {
       logError('Redis Explorer - Delete Key', error);
@@ -366,146 +368,139 @@ export function RedisExplorer() {
   if (activeConnection.status !== 'connected') {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center animate-fade-in">
-          <div className="relative mb-6">
-            <div className="absolute inset-0 bg-redis/20 blur-3xl rounded-full" />
-            <Server className="h-20 w-20 mx-auto text-redis/50 relative" />
-          </div>
-          <h3 className="text-lg font-semibold text-muted-foreground mb-2">等待连接</h3>
-          <p className="text-sm text-muted-foreground/70">请先连接 Redis 服务器</p>
+        <div className="text-center">
+          <Server className="h-6 w-6 mx-auto mb-2 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">等待连接</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex gap-4 p-4 animate-fade-in">
-      <Card className="w-80 flex-shrink-0 shadow-card border-border/50 flex flex-col">
-        <CardHeader className="pb-3 space-y-3 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-redis/10">
-              <Server className="h-4 w-4 text-redis" />
-            </div>
-            <CardTitle className="text-sm font-semibold">Keys</CardTitle>
+    <div className="h-full flex overflow-hidden">
+      {/* Keys Sidebar */}
+      <div className="w-60 flex-shrink-0 flex flex-col border-r border-border/50 bg-muted/20">
+        <div className="flex-shrink-0 px-3 py-2 border-b border-border/50 space-y-2">
+          <div className="flex items-center gap-1.5">
+            <Server className="h-3.5 w-3.5 text-redis" />
+            <span className="text-sm font-medium">Keys</span>
             {redisInfo && (
-              <Badge variant="secondary" className="ml-auto text-xs">
+              <Badge variant="secondary" className="ml-auto text-[10px] h-5">
                 {redisInfo.total_keys.toLocaleString()}
               </Badge>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <Database className="h-3.5 w-3.5 text-muted-foreground" />
+          <div className="flex items-center gap-1.5">
+            <Database className="h-3 w-3 text-muted-foreground" />
             <select
               value={selectedDb}
               onChange={e => handleDatabaseChange(Number(e.target.value))}
               disabled={loading || databases.length === 0}
-              className="flex-1 h-8 text-xs px-2 rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-redis/20"
+              className="flex-1 h-7 text-[11px] px-2 rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-redis/20"
             >
               {databases.map(db => (
                 <option key={db.index} value={db.index}>
-                  {db.name} ({db.keyCount.toLocaleString()} keys)
+                  {db.name} ({db.keyCount.toLocaleString()})
                 </option>
               ))}
             </select>
             <Button
               size="icon"
-              variant="outline"
+              variant="ghost"
               onClick={() => setShowAddDialog(true)}
               disabled={isReadOnly}
-              className="h-8 w-8 rounded-lg"
+              className="h-7 w-7"
             >
               <Plus className="h-3.5 w-3.5" />
             </Button>
             <Button
-              size="sm"
-              variant="outline"
+              size="icon"
+              variant="ghost"
               onClick={() => setShowImportDialog(true)}
               disabled={isReadOnly}
-              className="h-8 px-3 rounded-lg"
+              className="h-7 w-7"
             >
-              <Upload className="h-3.5 w-3.5 mr-1" />
-              导入
+              <Upload className="h-3.5 w-3.5" />
             </Button>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
               <Input
                 placeholder="搜索键..."
                 value={searchPattern}
                 onChange={e => setSearchPattern(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                className="h-9 pl-8 text-xs rounded-lg"
+                className="h-7 pl-6 text-xs rounded-md"
               />
             </div>
             <Button
               size="icon"
-              variant="outline"
+              variant="ghost"
               onClick={handleSearch}
               disabled={loading}
-              className="h-9 w-9 rounded-lg"
+              className="h-7 w-7"
             >
               {loading ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Search className="h-4 w-4" />
+                <Search className="h-3.5 w-3.5" />
               )}
             </Button>
             <Button
-              size="sm"
-              variant={isSelectMode ? 'default' : 'outline'}
+              size="icon"
+              variant={isSelectMode ? 'default' : 'ghost'}
               onClick={() => {
                 setIsSelectMode(!isSelectMode);
                 setSelectedKeys(new Set());
               }}
-              className="h-9 px-3 rounded-lg"
+              className="h-7 w-7"
             >
-              {isSelectMode ? '完成' : '批量'}
+              <Layers className="h-3.5 w-3.5" />
             </Button>
           </div>
 
           {isSelectMode && selectedKeys.size > 0 && (
-            <div className="flex gap-2 pt-2 border-t border-border/50">
+            <div className="flex gap-1 pt-1.5 border-t border-border/50">
               <Button
                 size="sm"
-                variant="outline"
+                variant="ghost"
                 onClick={toggleSelectAll}
-                className="flex-1 h-8 text-xs"
+                className="flex-1 h-6 text-[10px]"
               >
-                {selectedKeys.size === keys.length ? '取消全选' : '全选'} ({selectedKeys.size}/
-                {keys.length})
+                {selectedKeys.size === keys.length ? '取消' : '全选'} ({selectedKeys.size}/{keys.length})
               </Button>
               <Button
                 size="sm"
-                variant="outline"
+                variant="ghost"
                 onClick={() => handleBatchExport('json')}
                 disabled={exporting}
-                className="flex-1 h-8 text-xs"
+                className="h-6 px-2 text-[10px]"
               >
-                导出 JSON
+                导出
               </Button>
               <Button
                 size="sm"
-                variant="destructive"
+                variant="ghost"
                 onClick={handleBatchDelete}
                 disabled={isReadOnly}
-                className="flex-1 h-8 text-xs"
+                className="h-6 px-2 text-[10px] text-destructive hover:text-destructive"
               >
-                删除选中
+                删除
               </Button>
             </div>
           )}
-        </CardHeader>
-        <CardContent className="pt-0 flex-1 min-h-0 overflow-hidden flex flex-col">
-          <div className="space-y-1 overflow-auto pr-1 flex-1 min-h-0">
+        </div>
+        <div className="flex-1 min-h-0 overflow-auto px-2 py-1">
+          <div className="space-y-0.5">
             {keys.map(key => (
               <div
                 key={key.key}
                 className={cn(
-                  'group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-all duration-200',
+                  'group flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer text-xs transition-colors',
                   selectedKey === key.key
-                    ? 'bg-redis/10 border border-redis/20'
-                    : 'hover:bg-muted/50 border border-transparent'
+                    ? 'bg-redis/10 text-redis'
+                    : 'hover:bg-muted/60'
                 )}
                 onClick={() => {
                   if (isSelectMode) {
@@ -521,25 +516,18 @@ export function RedisExplorer() {
                     checked={selectedKeys.has(key.key)}
                     onChange={() => toggleKeySelection(key.key)}
                     onClick={e => e.stopPropagation()}
-                    className="h-4 w-4 rounded border-border"
+                    className="h-3 w-3 rounded border-border"
                   />
                 )}
                 {getTypeIcon(key.type)}
                 <div className="flex-1 min-w-0">
-                  <div
-                    className={cn(
-                      'truncate text-sm font-medium',
-                      selectedKey === key.key ? 'text-redis' : 'text-foreground'
-                    )}
-                  >
-                    {key.key}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs">
+                  <div className="truncate font-medium">{key.key}</div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                     {getTypeBadge(key.type)}
-                    <span className="text-muted-foreground">{formatBytes(key.size)}</span>
+                    <span>{formatBytes(key.size)}</span>
                     {key.ttl !== -1 && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3 text-amber-500" />
+                      <span className="flex items-center gap-0.5">
+                        <Clock className="h-2.5 w-2.5" />
                         {formatTTL(key.ttl)}
                       </span>
                     )}
@@ -548,186 +536,108 @@ export function RedisExplorer() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                  className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                   onClick={e => {
                     e.stopPropagation();
                     handleDeleteKey(key.key);
                   }}
                   disabled={isReadOnly}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 className="h-3 w-3" />
                 </Button>
               </div>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <div className="flex-1 flex flex-col gap-4 min-w-0">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Info Bar */}
         {redisInfo && (
-          <div className="grid grid-cols-4 gap-3">
-            <Card className="shadow-card border-border/50">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-redis/10">
-                    <Zap className="h-4 w-4 text-redis" />
-                  </div>
-                  <div>
-                    <div className="text-lg font-bold">{redisInfo.version}</div>
-                    <div className="text-xs text-muted-foreground">版本</div>
-                  </div>
+          <div className="flex-shrink-0 border-b border-border/50 px-4 py-2">
+            <div className="grid grid-cols-4 gap-4">
+              <div className="flex items-center gap-2">
+                <Zap className="h-3.5 w-3.5 text-redis" />
+                <div>
+                  <div className="text-xs font-medium">{redisInfo.version}</div>
+                  <div className="text-[10px] text-muted-foreground">版本</div>
                 </div>
-              </CardContent>
-            </Card>
-            <Card className="shadow-card border-border/50">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <HardDrive className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <div className="text-lg font-bold">{redisInfo.used_memory}</div>
-                    <div className="text-xs text-muted-foreground">内存使用</div>
-                  </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <HardDrive className="h-3.5 w-3.5 text-primary" />
+                <div>
+                  <div className="text-xs font-medium">{redisInfo.used_memory}</div>
+                  <div className="text-[10px] text-muted-foreground">内存</div>
                 </div>
-              </CardContent>
-            </Card>
-            <Card className="shadow-card border-border/50">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-500/10">
-                    <Users className="h-4 w-4 text-green-500" />
-                  </div>
-                  <div>
-                    <div className="text-lg font-bold">{redisInfo.connected_clients}</div>
-                    <div className="text-xs text-muted-foreground">连接数</div>
-                  </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Users className="h-3.5 w-3.5 text-green-500" />
+                <div>
+                  <div className="text-xs font-medium">{redisInfo.connected_clients}</div>
+                  <div className="text-[10px] text-muted-foreground">连接</div>
                 </div>
-              </CardContent>
-            </Card>
-            <Card className="shadow-card border-border/50">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-blue-500/10">
-                    <Database className="h-4 w-4 text-blue-500" />
-                  </div>
-                  <div>
-                    <div className="text-lg font-bold">{redisInfo.total_keys.toLocaleString()}</div>
-                    <div className="text-xs text-muted-foreground">键总数</div>
-                  </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Database className="h-3.5 w-3.5 text-blue-500" />
+                <div>
+                  <div className="text-xs font-medium">{redisInfo.total_keys.toLocaleString()}</div>
+                  <div className="text-[10px] text-muted-foreground">键总数</div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
         )}
 
         {selectedKey && (
-          <Card className="flex-1 flex flex-col overflow-hidden shadow-card border-border/50 animate-fade-in">
-            <CardHeader className="pb-3 border-b flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {getTypeIcon(keys.find(k => k.key === selectedKey)?.type || 'string')}
-                  <div>
-                    <CardTitle className="text-sm font-semibold font-mono">{selectedKey}</CardTitle>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {getTypeBadge(keys.find(k => k.key === selectedKey)?.type || 'string')}
-                      <span className="text-xs text-muted-foreground">
-                        {formatBytes(keys.find(k => k.key === selectedKey)?.size || 0)}
-                      </span>
-                      {isReadOnly && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] border-amber-200 bg-amber-50 text-amber-700"
-                        >
-                          只读
-                        </Badge>
-                      )}
-                    </div>
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Key Header */}
+            <div className="flex-shrink-0 border-b border-border/50 px-4 py-2 flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                {getTypeIcon(keys.find(k => k.key === selectedKey)?.type || 'string')}
+                <div className="min-w-0">
+                  <span className="text-sm font-mono font-medium truncate block">{selectedKey}</span>
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                    {getTypeBadge(keys.find(k => k.key === selectedKey)?.type || 'string')}
+                    <span>{formatBytes(keys.find(k => k.key === selectedKey)?.size || 0)}</span>
+                    {isReadOnly && (
+                      <Badge variant="outline" className="text-[9px] h-4 border-amber-300 text-amber-600">只读</Badge>
+                    )}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 rounded-lg"
-                    onClick={() => setShowEditDialog(true)}
-                    disabled={isReadOnly}
-                  >
-                    <Pencil className="h-3.5 w-3.5 mr-1.5" />
-                    编辑
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 rounded-lg"
-                    onClick={handleCopy}
-                  >
-                    {copied ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5 text-green-500" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5 mr-1.5" />
-                    )}
-                    {copied ? '已复制' : '复制'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 rounded-lg"
-                    onClick={() => handleExport('json')}
-                    disabled={exporting}
-                  >
-                    <Download className="h-3.5 w-3.5 mr-1.5" />
-                    JSON
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 rounded-lg"
-                    onClick={() => handleExport('txt')}
-                    disabled={exporting}
-                  >
-                    <Download className="h-3.5 w-3.5 mr-1.5" />
-                    TXT
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 rounded-lg"
-                    onClick={handleRefresh}
-                    disabled={loading}
-                  >
-                    <RefreshCw className={cn('h-3.5 w-3.5 mr-1.5', loading && 'animate-spin')} />
-                    刷新
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    className="h-8 rounded-lg"
-                    onClick={() => handleDeleteKey(selectedKey)}
-                    disabled={isReadOnly}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                    删除
-                  </Button>
-                </div>
               </div>
-            </CardHeader>
-            <CardContent className="flex-1 p-0 overflow-auto">
-              <pre className="p-4 text-sm font-mono bg-muted/30 min-h-full">{keyValue}</pre>
-            </CardContent>
-          </Card>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowEditDialog(true)} disabled={isReadOnly}>
+                  <Pencil className="h-3 w-3" />
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCopy}>
+                  {copied ? <CheckCircle2 className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleExport('json')} disabled={exporting}>
+                  <Download className="h-3 w-3" />
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleRefresh} disabled={loading}>
+                  <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} />
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteKey(selectedKey)} disabled={isReadOnly}>
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+            {/* Key Value */}
+            <div className="flex-1 overflow-auto p-4">
+              <pre className="text-xs font-mono whitespace-pre-wrap">{keyValue}</pre>
+            </div>
+          </div>
         )}
 
         {!selectedKey && (
-          <Card className="flex-1 flex items-center justify-center shadow-card border-border/50">
+          <div className="flex items-center justify-center h-full text-muted-foreground">
             <div className="text-center">
-              <div className="p-4 rounded-2xl bg-muted/50 mb-4 mx-auto w-fit">
-                <Terminal className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <p className="text-muted-foreground font-medium">选择一个键查看详情</p>
-              <p className="text-xs text-muted-foreground/70 mt-1">从左侧面板点击任意键</p>
+              <Terminal className="h-6 w-6 mx-auto mb-2 opacity-30" />
+              <p className="text-xs">点击键查看详情</p>
             </div>
-          </Card>
+          </div>
         )}
       </div>
 

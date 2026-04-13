@@ -7,6 +7,7 @@
     "core:default",
     "os:default",
     "shell:allow-open",
+    "dialog:allow-open",
     "updater:default",
     "updater:allow-check",
     "updater:allow-download",

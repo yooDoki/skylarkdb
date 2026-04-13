@@ -523,6 +523,107 @@ fn escape_mysql_value(s: &str) -> String {
     result
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn create_temp_json(content: &str) -> NamedTempFile {
+        let mut f = NamedTempFile::new().unwrap();
+        write!(f, "{}", content).unwrap();
+        f
+    }
+
+    fn create_temp_csv(content: &str) -> NamedTempFile {
+        let mut f = NamedTempFile::new().unwrap();
+        write!(f, "{}", content).unwrap();
+        f
+    }
+
+    #[test]
+    fn test_parse_json_array() {
+        let json = r#"[{"id":1,"name":"test"},{"id":2,"name":"test2"}]"#;
+        let f = create_temp_json(json);
+        let result = parse_json_file(f.path());
+        assert!(result.is_ok());
+        let data = result.unwrap();
+        assert!(data.as_array().is_some());
+        assert_eq!(data.as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_parse_json_object() {
+        let json = r#"{"users":[{"id":1,"name":"test"}]}"#;
+        let f = create_temp_json(json);
+        let result = parse_json_file(f.path());
+        assert!(result.is_ok());
+        let data = result.unwrap();
+        assert!(data.as_object().is_some());
+    }
+
+    #[test]
+    fn test_parse_invalid_json() {
+        let json = r#"{invalid json"#;
+        let f = create_temp_json(json);
+        let result = parse_json_file(f.path());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_csv_basic() {
+        let csv = "id,name,email\n1,test,test@example.com\n2,test2,test2@example.com\n";
+        let f = create_temp_csv(csv);
+        let result = parse_csv_file(f.path());
+        assert!(result.is_ok());
+        let (headers, rows) = result.unwrap();
+        assert_eq!(headers.len(), 3);
+        assert_eq!(headers[0], "id");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].len(), 3);
+        assert_eq!(rows[0][1], "test");
+    }
+
+    #[test]
+    fn test_parse_csv_with_quotes() {
+        let csv = "name,description\n\"Zhang San\",\"Hello, World\"\n\"Li Si\",\"Test \\\"quote\\\"\"\n";
+        let f = create_temp_csv(csv);
+        let result = parse_csv_file(f.path());
+        assert!(result.is_ok());
+        let (_headers, rows) = result.unwrap();
+        assert_eq!(rows.len(), 2);
+        // First row: name with comma in description
+        assert_eq!(rows[0][0], "Zhang San");
+        assert_eq!(rows[0][1], "Hello, World");
+    }
+
+    #[test]
+    fn test_map_type_integer() {
+        assert_eq!(map_type_to_mysql("int", None), "INT");
+        assert_eq!(map_type_to_mysql("integer", None), "INT");
+        assert_eq!(map_type_to_mysql("bigint", None), "BIGINT");
+    }
+
+    #[test]
+    fn test_map_type_infer_from_value() {
+        assert_eq!(map_type_to_mysql("", Some("42")), "TINYINT");
+        assert_eq!(map_type_to_mysql("", Some("30000")), "SMALLINT");
+        assert_eq!(map_type_to_mysql("", Some("1000000")), "INT");
+        assert_eq!(map_type_to_mysql("", Some("3.14")), "DOUBLE");
+        assert_eq!(map_type_to_mysql("", Some("2026-01-15")), "DATE");
+        assert_eq!(map_type_to_mysql("", Some("2026-01-15 10:30:00")), "DATETIME");
+        assert_eq!(map_type_to_mysql("", Some("{\"key\": \"val\"}")), "JSON");
+    }
+
+    #[test]
+    fn test_escape_mysql_value() {
+        assert_eq!(escape_mysql_value("hello"), "hello");
+        assert_eq!(escape_mysql_value("it's"), "it\\'s");
+        assert_eq!(escape_mysql_value("line1\nline2"), "line1\\nline2");
+        assert_eq!(escape_mysql_value(""), "");
+    }
+}
+
 /// Main import function
 pub async fn import_database(
     pool: &MySqlPool,

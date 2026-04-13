@@ -66,6 +66,17 @@ export function AddKeyDialog({ open, onOpenChange, onSuccess }: AddKeyDialogProp
     }
   }, [open]);
 
+  // 表单重置
+  useEffect(() => {
+    if (!open) {
+      setKeyName('');
+      setKeyType('string');
+      setValue('');
+      setTtl('');
+      setError(null);
+    }
+  }, [open]);
+
   const getValuePlaceholder = useCallback(() => {
     switch (keyType) {
       case 'string':
@@ -108,17 +119,16 @@ export function AddKeyDialog({ open, onOpenChange, onSuccess }: AddKeyDialogProp
       }
     }
 
+    const ttlValue = ttl.trim() ? parseInt(ttl, 10) : undefined;
+    if (ttlValue && ttlValue <= 0) {
+      setError('TTL 必须大于 0');
+      return;
+    }
+
     setIsCreating(true);
     setError(null);
 
     try {
-      const ttlValue = ttl.trim() ? parseInt(ttl, 10) : undefined;
-      if (ttlValue && ttlValue <= 0) {
-        setError('TTL 必须大于 0');
-        setIsCreating(false);
-        return;
-      }
-
       await setRedisKey(
         activeConnection.connection.id,
         keyName.trim(),
@@ -127,11 +137,6 @@ export function AddKeyDialog({ open, onOpenChange, onSuccess }: AddKeyDialogProp
         ttlValue
       );
 
-      // 重置表单
-      setKeyName('');
-      setValue('');
-      setTtl('');
-      setKeyType('string');
       onSuccess();
       onOpenChange?.(false);
     } catch (err) {
@@ -139,15 +144,6 @@ export function AddKeyDialog({ open, onOpenChange, onSuccess }: AddKeyDialogProp
     } finally {
       setIsCreating(false);
     }
-  };
-
-  const handleClose = () => {
-    setError(null);
-    setKeyName('');
-    setValue('');
-    setTtl('');
-    setKeyType('string');
-    onOpenChange?.(false);
   };
 
   const getCommandPreview = () => {
@@ -158,30 +154,36 @@ export function AddKeyDialog({ open, onOpenChange, onSuccess }: AddKeyDialogProp
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-redis/20 to-redis/10 flex items-center justify-center">
-              <Key className="h-4 w-4 text-redis" />
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent 
+        className="max-w-2xl p-0 gap-0 overflow-hidden"
+        onSubmit={handleCreate}
+        submitDisabled={isCreating || isReadOnly}
+      >
+        {/* Header */}
+        <div className="border-b border-border/70 bg-muted/[0.12] px-5 py-3.5">
+          <DialogHeader className="space-y-0">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-redis/15 bg-redis/10 text-redis shadow-sm">
+                <Key className="h-4 w-4" />
+              </div>
+              <div>
+                <DialogTitle className="text-[17px] font-semibold tracking-tight">新建 Redis 键</DialogTitle>
+                <DialogDescription className="text-xs mt-0.5">
+                  在当前数据库中创建新的键值对
+                </DialogDescription>
+              </div>
             </div>
-            <div>
-              <DialogTitle className="text-lg">新建 Redis 键</DialogTitle>
-              <DialogDescription className="text-xs mt-0.5">
-                在当前数据库中创建新的键值对
-              </DialogDescription>
+          </DialogHeader>
+        </div>
+
+        <div className="space-y-5 px-5 py-5 max-h-[60vh] overflow-y-auto">
+          {error && (
+            <div className="flex items-start gap-2.5 p-3.5 border border-destructive/40 bg-destructive/8 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-destructive leading-relaxed">{error}</p>
             </div>
-          </div>
-        </DialogHeader>
-
-        {error && (
-          <div className="flex items-start gap-2 p-3 border border-destructive/50 bg-destructive/10 rounded-lg">
-            <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-destructive">{error}</p>
-          </div>
-        )}
-
-        <div className="space-y-4 py-2">
+          )}
           {/* 第一行：键名 + 类型 */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -196,8 +198,8 @@ export function AddKeyDialog({ open, onOpenChange, onSuccess }: AddKeyDialogProp
                 value={keyName}
                 onChange={e => setKeyName(e.target.value)}
                 placeholder="user:1001"
-                className="font-mono"
-                disabled={isReadOnly}
+                className="font-mono h-10 rounded-lg border-border/80"
+                disabled={isReadOnly || isCreating}
               />
             </div>
 
@@ -206,8 +208,8 @@ export function AddKeyDialog({ open, onOpenChange, onSuccess }: AddKeyDialogProp
                 <Layers className="h-3.5 w-3.5 text-muted-foreground" />
                 类型
               </Label>
-              <Select value={keyType} onValueChange={setKeyType} disabled={isReadOnly}>
-                <SelectTrigger id="keyType" className="font-mono">
+              <Select value={keyType} onValueChange={setKeyType} disabled={isReadOnly || isCreating}>
+                <SelectTrigger id="keyType" className="font-mono h-10 rounded-lg border-border/80">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -238,8 +240,9 @@ export function AddKeyDialog({ open, onOpenChange, onSuccess }: AddKeyDialogProp
               value={value}
               onChange={e => setValue(e.target.value)}
               placeholder={getValuePlaceholder()}
-              className="w-full min-h-[120px] px-3 py-2 text-sm font-mono bg-background border border-input rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-redis/20 focus:border-transparent transition-all"
-              disabled={isReadOnly}
+              className="w-full min-h-[120px] px-3.5 py-3 text-[13px] font-mono leading-relaxed bg-background border border-border/80 rounded-lg resize-y focus:outline-none focus:ring-2 focus:ring-redis/20 focus:border-redis/30 shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)]"
+              disabled={isReadOnly || isCreating}
+              spellCheck={false}
             />
           </div>
 
@@ -258,48 +261,64 @@ export function AddKeyDialog({ open, onOpenChange, onSuccess }: AddKeyDialogProp
               value={ttl}
               onChange={e => setTtl(e.target.value)}
               placeholder="例如：3600 (1 小时)"
-              className="font-mono w-48"
+              className="font-mono w-48 h-10 rounded-lg border-border/80"
               min="1"
-              disabled={isReadOnly}
+              disabled={isReadOnly || isCreating}
             />
           </div>
 
           {/* 命令预览 */}
-          <Card className="border-dashed bg-muted/30">
-            <CardContent className="p-3">
+          <Card className="border-border/50 bg-muted/30">
+            <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-xs font-medium text-muted-foreground">命令预览</span>
               </div>
-              <code className="text-xs font-mono bg-muted px-2 py-1.5 rounded block break-all">
+              <code className="text-xs font-mono bg-muted px-3 py-2 rounded-lg block break-all leading-relaxed">
                 {getCommandPreview()}
               </code>
             </CardContent>
           </Card>
+
+          {/* 提示信息 */}
+          <div className="rounded-lg border border-border/50 bg-muted/20 p-3 text-xs text-muted-foreground leading-relaxed">
+            <p className="flex items-center gap-1.5">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+              提示: 按 <kbd className="px-1.5 py-0.5 rounded bg-background border border-border text-[10px] font-mono">Ctrl/⌘ + Enter</kbd> 快速提交
+            </p>
+          </div>
         </div>
 
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={handleClose} disabled={isCreating}>
-            取消
-          </Button>
-          <Button
-            onClick={handleCreate}
-            disabled={isCreating || isReadOnly}
-            className="bg-redis hover:bg-redis/90 text-white"
-          >
-            {isCreating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                创建中...
-              </>
-            ) : (
-              <>
-                <Plus className="h-4 w-4 mr-2" />
-                创建键
-              </>
-            )}
-          </Button>
-        </DialogFooter>
+        {/* Footer */}
+        <div className="border-t border-border/70 bg-muted/[0.08] px-5 py-3.5">
+          <DialogFooter className="gap-2.5">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange?.(false)}
+              disabled={isCreating}
+              className="h-9 min-w-[80px] rounded-lg border-border/80 bg-background px-4"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={isCreating || isReadOnly}
+              className="h-9 min-w-[80px] rounded-lg px-4 bg-redis hover:bg-redis/90 shadow-[0_8px_18px_-10px_rgba(225,85,50,0.55)]"
+            >
+              {isCreating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  创建中...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  创建键
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

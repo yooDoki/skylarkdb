@@ -3,7 +3,6 @@ import { useConnectionStore } from '@/stores/connectionStore';
 import { MySQLColumn, MySQLTable, TableData } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -43,7 +42,6 @@ import {
   Loader2,
   Folder,
   FolderOpen,
-  FolderPlus,
   Plus,
   Trash2,
   KeyRound,
@@ -133,12 +131,16 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
   const CACHE_TIMEOUT = 5 * 60 * 1000;
 
   const loadDatabases = useCallback(
-    async (connectionId: string) => {
+    async (connectionId: string, selectDb?: string) => {
       setLoadingDatabases(true);
       try {
         const dbs = await getMySQLDatabases(connectionId);
         setDatabases(dbs);
-        if (dbs.length > 0 && !selectedDatabase) {
+        // 如果指定了要选择的数据库，直接选择
+        if (selectDb) {
+          setSelectedDatabase(selectDb);
+        } else if (dbs.length > 0) {
+          // 否则检查是否有默认数据库
           const defaultDb = activeConnection.connection?.database;
           if (defaultDb && dbs.includes(defaultDb)) {
             setSelectedDatabase(defaultDb);
@@ -150,7 +152,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
         setLoadingDatabases(false);
       }
     },
-    [selectedDatabase, activeConnection.connection?.database, setSelectedDatabase]
+    [activeConnection.connection?.database, setSelectedDatabase]
   );
 
   const loadTables = useCallback(async (connectionId: string, database: string) => {
@@ -232,6 +234,15 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     }
     tableCache.current.clear();
   }, [activeConnection.connection?.id, selectedDatabase, loadTables]);
+
+  const handleCreateDatabaseSuccess = useCallback(
+    (databaseName: string) => {
+      if (activeConnection.connection?.id) {
+        loadDatabases(activeConnection.connection.id, databaseName);
+      }
+    },
+    [activeConnection.connection?.id, loadDatabases]
+  );
 
   const handleDeleteSuccess = useCallback(() => {
     if (activeConnection.connection?.id && selectedDatabase) {
@@ -920,101 +931,105 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
   if (activeConnection.status !== 'connected') {
     return (
       <div className="h-full flex items-center justify-center p-4">
-        <Card className="w-full max-w-md border-border/60 bg-card/90 shadow-card backdrop-blur-sm">
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-4 rounded-2xl bg-mysql/10 p-4">
-              {activeConnection.status === 'connecting' ? (
-                <Loader2 className="h-10 w-10 animate-spin text-mysql" />
-              ) : (
-                <Database className="h-10 w-10 text-mysql" />
-              )}
-            </div>
-            <h3 className="text-lg font-semibold">
-              {activeConnection.status === 'connecting' ? '正在连接数据库' : '数据库尚未连接'}
-            </h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {activeConnection.status === 'connecting'
-                ? '正在恢复上次使用的连接，请稍候。如果长时间没有变化，可以手动重试。'
-                : '连接建立后会自动恢复数据库和数据浏览状态。'}
-            </p>
-            {activeConnection.error && (
-              <p className="mt-4 text-xs text-destructive">{activeConnection.error}</p>
-            )}
-            {onReconnect && activeConnection.status !== 'connecting' && (
-              <Button className="mt-5" onClick={onReconnect}>
-                重新连接
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+        <div className="text-center">
+          {activeConnection.status === 'connecting' ? (
+            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+          ) : (
+            <Database className="h-6 w-6 mx-auto mb-2 text-muted-foreground/50" />
+          )}
+          <p className="text-sm text-muted-foreground">
+            {activeConnection.status === 'connecting' ? '正在连接...' : '未连接'}
+          </p>
+          {activeConnection.error && (
+            <p className="mt-2 text-xs text-destructive">{activeConnection.error}</p>
+          )}
+          {onReconnect && activeConnection.status !== 'connecting' && (
+            <Button className="mt-3" size="sm" onClick={onReconnect}>
+              重新连接
+            </Button>
+          )}
+        </div>
       </div>
     );
   }
 
   if (!selectedDatabase) {
     return (
-      <div className="h-full flex gap-4 p-4">
-        <Card className="flex-1 border-border/60 bg-card/90 shadow-card backdrop-blur-sm">
-          <CardHeader className="border-b border-border/60 bg-gradient-to-b from-background to-muted/10 pb-3">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-mysql/10">
-                <Database className="h-4 w-4 text-mysql" />
-              </div>
-              <CardTitle className="text-sm font-semibold">选择数据库</CardTitle>
-              <div className="ml-auto flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 text-xs"
-                  onClick={() => setShowCreateDatabase(true)}
-                  disabled={isReadOnly || loadingDatabases}
+      <div className="h-full flex flex-col p-3">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Database className="h-4 w-4 text-mysql" />
+            <span className="text-sm font-medium">选择数据库</span>
+            <Badge variant="secondary" className="text-[10px] h-5">
+              {databases.length}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setShowCreateDatabase(true)}
+              title="新建数据库"
+              disabled={isReadOnly}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => {
+                if (activeConnection.connection?.id) {
+                  loadDatabases(activeConnection.connection.id);
+                }
+              }}
+              title="刷新"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+        {loadingDatabases ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : databases.length === 0 ? (
+          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+            暂无数据库
+          </div>
+        ) : (
+          <div className="flex-1 overflow-auto">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5">
+              {databases.map(db => (
+                <button
+                  key={db}
+                  onClick={() => setSelectedDatabase(db)}
+                  className="flex items-center gap-2 rounded-md border border-border/50 px-3 py-2 text-left text-sm hover:bg-accent/50 transition-colors"
                 >
-                  <FolderPlus className="h-3.5 w-3.5" />
-                  新建数据库
-                </Button>
-                <Badge variant="secondary" className="text-xs shadow-sm">
-                  {databases.length}
-                </Badge>
-              </div>
+                  <Folder className="h-3.5 w-3.5 text-mysql flex-shrink-0" />
+                  <span className="truncate">{db}</span>
+                </button>
+              ))}
             </div>
-          </CardHeader>
-          <CardContent>
-            {loadingDatabases ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : databases.length === 0 ? (
-              <div className="flex items-center justify-center py-8 text-muted-foreground">
-                暂无数据库
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                {databases.map(db => (
-                  <button
-                    key={db}
-                    onClick={() => setSelectedDatabase(db)}
-                    className="group flex items-center gap-2 rounded-xl border border-border/60 bg-background/80 p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/30 hover:shadow-md"
-                  >
-                    <div className="rounded-lg bg-mysql/10 p-1.5 transition-colors group-hover:bg-mysql/15">
-                      <Folder className="h-4 w-4 text-mysql" />
-                    </div>
-                    <span className="text-sm font-medium truncate">{db}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          </div>
+        )}
+
+        <CreateDatabaseDialog
+          open={showCreateDatabase}
+          onOpenChange={setShowCreateDatabase}
+          onSuccess={handleCreateDatabaseSuccess}
+        />
       </div>
     );
   }
 
   return (
-    <div className="h-full min-h-0 flex gap-4 overflow-hidden bg-gradient-to-b from-background to-muted/10 p-4">
+    <div className="h-full min-h-0 flex overflow-hidden">
       {/* Sidebar - Tables */}
-      <Card className="flex w-72 min-h-0 flex-shrink-0 flex-col overflow-hidden border-border/60 bg-card/90 shadow-card backdrop-blur-sm">
-        <CardHeader className="flex-shrink-0 space-y-3 border-b border-border/60 bg-gradient-to-b from-background to-muted/10 pb-3">
-          <div className="flex items-center gap-2">
+      <div className="w-60 flex-shrink-0 flex flex-col border-r border-border/50 bg-muted/20">
+        <div className="flex-shrink-0 px-3 py-2 border-b border-border/50 space-y-2">
+          <div className="flex items-center gap-1.5">
             <Button
               variant="ghost"
               size="icon"
@@ -1028,40 +1043,46 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
             >
               <ArrowLeft className="h-3.5 w-3.5" />
             </Button>
-            <div className="p-1.5 rounded-lg bg-mysql/10">
-              <FolderOpen className="h-4 w-4 text-mysql" />
-            </div>
-            <CardTitle className="text-sm font-semibold truncate flex-1">
-              {selectedDatabase}
-            </CardTitle>
-            <Badge variant="secondary" className="text-xs">
+            <FolderOpen className="h-3.5 w-3.5 text-mysql" />
+            <span className="text-sm font-medium truncate flex-1">{selectedDatabase}</span>
+            <Badge variant="secondary" className="text-[10px] h-5">
               {tables.length}
             </Badge>
           </div>
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
             <Input
               placeholder="搜索表..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="h-8 rounded-lg border-border/60 bg-background/80 pl-8 text-xs"
+              className="h-7 pl-6 text-xs rounded-md"
             />
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
               onClick={() => setShowCreateTable(true)}
               title="创建表"
               disabled={isReadOnly}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
+              onClick={() => setShowImportData(true)}
+              title="导入数据"
+              disabled={isReadOnly}
+            >
+              <Upload className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
               onClick={() => {
                 if (activeConnection.connection?.id && selectedDatabase) {
                   loadTables(activeConnection.connection.id, selectedDatabase);
@@ -1069,13 +1090,13 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
               }}
               title="刷新"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className="h-3.5 w-3.5" />
             </Button>
           </div>
-        </CardHeader>
+        </div>
         <div
           ref={tableListRef}
-          className="min-h-0 flex-1 overflow-auto px-4 py-4"
+          className="min-h-0 flex-1 overflow-auto px-2 py-1"
           style={
             {
               scrollbarWidth: 'thin',
@@ -1083,27 +1104,27 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
             } as React.CSSProperties
           }
         >
-          <div className="space-y-1">
-            {loadingTables ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : filteredTables.length === 0 ? (
-              <div className="flex items-center justify-center py-8 text-muted-foreground text-xs">
-                暂无数据表
-              </div>
-            ) : (
-              filteredTables.map(table => (
-                <div key={`${table.schema}-${table.name}`} className="transition-all duration-150">
+          {loadingTables ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredTables.length === 0 ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground text-xs">
+              暂无数据表
+            </div>
+          ) : (
+            <div className="space-y-0.5">
+              {filteredTables.map(table => (
+                <div key={`${table.schema}-${table.name}`}>
                   <button
                     data-table-name={table.name}
                     onClick={() => handleTableClick(table.name)}
                     onDoubleClick={() => handleTableDoubleClick(table.name)}
                     className={cn(
-                      'group w-full flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-all',
+                      'group w-full flex items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors',
                       viewingTable === table.name
-                        ? 'border-primary/25 bg-primary/[0.08] text-primary shadow-sm'
-                        : 'border-transparent hover:border-border/70 hover:bg-muted/60'
+                        ? 'bg-primary/10 text-primary'
+                        : 'hover:bg-muted/60'
                     )}
                   >
                     {expandedTables.has(table.name) ? (
@@ -1113,90 +1134,50 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                     )}
                     <Table2
                       className={cn(
-                        'h-3.5 w-3.5 flex-shrink-0 transition-colors',
+                        'h-3.5 w-3.5 flex-shrink-0',
                         viewingTable === table.name
                           ? 'text-primary'
-                          : 'text-muted-foreground group-hover:text-foreground'
+                          : 'text-muted-foreground'
                       )}
                     />
-                    <span className="text-xs truncate flex-1" title={table.name}>
+                    <span className="truncate flex-1" title={table.name}>
                       {table.name}
                     </span>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        'h-5 px-1.5 text-[10px] font-medium',
-                        viewingTable === table.name
-                          ? 'border-primary/20 bg-primary/10 text-primary'
-                          : 'border-border/70 bg-background/70 text-muted-foreground'
-                      )}
-                    >
+                    <span className="text-[10px] text-muted-foreground tabular-nums">
                       {table.rows}
-                    </Badge>
+                    </span>
                   </button>
 
                   {expandedTables.has(table.name) && (
-                    <div className="mt-1 ml-5 rounded-xl border border-border/60 bg-muted/20 px-2.5 py-2">
+                    <div className="ml-4 border-l border-border/40 pl-2 py-1">
                       {loadingColumns.has(table.name) ? (
-                        <div className="flex items-center gap-2 px-1 py-2 text-xs text-muted-foreground">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          正在加载字段...
+                        <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          加载中...
                         </div>
                       ) : (tableColumns.get(table.name)?.length ?? 0) > 0 ? (
-                        <div className="space-y-1">
+                        <div className="space-y-0.5">
                           {tableColumns.get(table.name)!.map(column => (
                             <div
                               key={`${table.name}-${column.name}`}
-                              className="group/column flex items-start gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-background/70"
+                              className="group/column flex items-center gap-1.5 px-1 py-1 rounded text-[11px] hover:bg-muted/40"
                             >
-                              <div className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-background text-muted-foreground">
+                              <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
                                 {column.isPrimaryKey ? (
-                                  <KeyRound className="h-3 w-3 text-amber-500" />
+                                  <KeyRound className="h-2.5 w-2.5 text-amber-500" />
                                 ) : column.extra.includes('auto_increment') ? (
-                                  <KeyRound className="h-3 w-3" />
+                                  <KeyRound className="h-2.5 w-2.5 text-muted-foreground" />
                                 ) : (
-                                  <span className="text-[10px] font-semibold">#</span>
+                                  <span className="text-[8px] text-muted-foreground">#</span>
                                 )}
                               </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className="truncate text-[11px] font-medium text-foreground"
-                                    title={column.name}
-                                  >
-                                    {column.name}
-                                  </span>
-                                  {column.isPrimaryKey && (
-                                    <Badge
-                                      variant="outline"
-                                      className="h-4 px-1 text-[9px] uppercase border-amber-200 bg-amber-50 text-amber-700"
-                                    >
-                                      PK
-                                    </Badge>
-                                  )}
-                                  {!column.nullable && (
-                                    <Badge
-                                      variant="outline"
-                                      className="h-4 px-1 text-[9px] uppercase"
-                                    >
-                                      NN
-                                    </Badge>
-                                  )}
-                                  {column.extra.includes('auto_increment') && (
-                                    <Badge
-                                      variant="secondary"
-                                      className="h-4 px-1 text-[9px] uppercase"
-                                    >
-                                      AI
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="mt-0.5 text-[10px] text-muted-foreground">
-                                  {column.fullType}
-                                </div>
-                              </div>
+                              <span className="truncate flex-1 text-foreground/80">{column.name}</span>
+                              <span className="text-muted-foreground/60 text-[10px]">{column.fullType}</span>
+                              {column.isPrimaryKey && (
+                                <span className="text-[9px] text-amber-600 font-medium">PK</span>
+                              )}
                               <button
-                                className="flex-shrink-0 rounded p-0.5 opacity-0 transition-colors group-hover/column:opacity-100 hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40"
+                                className="flex-shrink-0 opacity-0 group-hover/column:opacity-100 hover:text-destructive text-muted-foreground transition-opacity"
                                 title={`删除列 ${column.name}`}
                                 onClick={e => {
                                   e.stopPropagation();
@@ -1207,514 +1188,424 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                 }}
                                 disabled={isReadOnly}
                               >
-                                <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                                <Trash2 className="h-2.5 w-2.5" />
                               </button>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <div className="px-1 py-2 text-xs text-muted-foreground">暂无字段信息</div>
+                        <div className="px-1 py-1 text-[11px] text-muted-foreground">暂无字段</div>
                       )}
                     </div>
                   )}
                 </div>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
-      </Card>
+      </div>
 
       {/* Main Content */}
-      <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-4">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         {viewingTable && tableData ? (
           <>
-            {/* Table Data View */}
-            <Card className="flex flex-1 min-h-0 flex-col overflow-hidden border-border/60 bg-card/92 shadow-card backdrop-blur-sm transition-all duration-200">
-              <CardHeader className="flex-shrink-0 border-b border-border/60 bg-gradient-to-b from-background via-background to-muted/10 pb-4">
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="p-1.5 rounded-lg bg-mysql/10">
-                      <Table2 className="h-4 w-4 text-mysql" />
-                    </div>
-                    <div className="min-w-0">
-                      <CardTitle className="truncate text-sm font-semibold">
-                        {viewingTable}
-                      </CardTitle>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        {tableData && (
-                          <>
-                            <span>共 {tableData.totalCount.toLocaleString()} 条记录</span>
-                            <span className="h-1 w-1 rounded-full bg-border" />
-                            <span>{tableData.columns.length} 列</span>
-                          </>
-                        )}
-                        {isReadOnly && (
-                          <>
-                            <span className="h-1 w-1 rounded-full bg-border" />
-                            <span>当前连接为只读模式</span>
-                          </>
-                        )}
-                        {currentTableColumns.length > 0 && (
-                          <>
-                            <span className="h-1 w-1 rounded-full bg-border" />
-                            {canUpdateRows ? (
-                              <span>支持行内编辑</span>
-                            ) : primaryKeyColumns.length > 0 ? (
-                              <span>没有可直接编辑的普通列</span>
-                            ) : (
-                              <span>无主键，暂不支持编辑或删除</span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-                    {tableData && (
-                      <div className="mr-1 flex items-center gap-2 text-xs text-muted-foreground">
-                        <Badge variant="secondary" className="font-mono shadow-sm">
-                          {tableData.rows.length} 条/页
-                        </Badge>
-                        <span>执行时间: {tableData.executionTime.toFixed(3)}s</span>
-                      </div>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7"
-                      onClick={() => {
-                        if (abortControllerRef.current) {
-                          abortControllerRef.current.abort();
-                        }
-                        const controller = new AbortController();
-                        abortControllerRef.current = controller;
-                        loadTableData(viewingTable, currentPage, controller.signal);
-                      }}
-                    >
-                      <RefreshCw className="h-3 w-3 mr-1" />
-                      刷新
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7"
-                      onClick={() => setShowInsertRow(true)}
-                      disabled={!canInsertRows}
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      新增行
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7"
-                      onClick={() => setShowImportData(true)}
-                      disabled={isReadOnly}
-                    >
-                      <Upload className="h-3 w-3 mr-1" />
-                      导入数据
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7"
-                      onClick={() => setShowAddColumn(true)}
-                      disabled={isReadOnly}
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      新增列
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-destructive hover:text-destructive"
-                      onClick={() => setDeleteTableName(viewingTable)}
-                      disabled={isReadOnly}
-                    >
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      删除表
-                    </Button>
-                  </div>
+            {/* Table Header Bar */}
+            <div className="flex-shrink-0 border-b border-border/50 px-4 py-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Table2 className="h-4 w-4 text-mysql flex-shrink-0" />
+                  <span className="text-sm font-medium truncate">{viewingTable}</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {tableData.totalCount.toLocaleString()} 条 · {tableData.columns.length} 列
+                  </span>
+                  {isReadOnly && (
+                    <Badge variant="outline" className="text-[9px] h-4 border-amber-300 text-amber-600">
+                      只读
+                    </Badge>
+                  )}
                 </div>
-              </CardHeader>
-              <CardContent className="flex-1 min-h-0 overflow-hidden flex flex-col p-0">
-                {loading ? (
-                  <div className="flex items-center justify-center h-full">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <span className="text-[11px] text-muted-foreground mr-1">
+                    {tableData.executionTime.toFixed(3)}s
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => {
+                      if (abortControllerRef.current) {
+                        abortControllerRef.current.abort();
+                      }
+                      const controller = new AbortController();
+                      abortControllerRef.current = controller;
+                      loadTableData(viewingTable, currentPage, controller.signal);
+                    }}
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setShowInsertRow(true)}
+                    disabled={!canInsertRows}
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span className="ml-0.5">行</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setShowAddColumn(true)}
+                    disabled={isReadOnly}
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span className="ml-0.5">列</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTableName(viewingTable)}
+                    disabled={isReadOnly}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Edit Message / Info */}
+            {(editMessage || currentTableColumns.length > 0 || loadingColumns.has(viewingTable)) && (
+              <div className="flex-shrink-0 px-4 pt-2">
+                {editMessage && (
+                  <div
+                    className={cn(
+                      'mb-2 rounded-md border px-2.5 py-1.5 text-xs',
+                      editMessage.type === 'success'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-destructive/30 bg-destructive/5 text-destructive'
+                    )}
+                  >
+                    {editMessage.text}
                   </div>
-                ) : tableData.columns.length === 0 ? (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    暂无数据
+                )}
+                {loadingColumns.has(viewingTable) ? (
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    加载列信息...
                   </div>
                 ) : (
-                  <>
-                    {(editMessage ||
-                      currentTableColumns.length > 0 ||
-                      loadingColumns.has(viewingTable)) && (
-                      <div className="px-6 pt-4">
-                        {editMessage && (
-                          <div
-                            className={cn(
-                              'mb-3 rounded-lg border px-3 py-2 text-xs',
-                              editMessage.type === 'success'
-                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                : 'border-destructive/30 bg-destructive/5 text-destructive'
-                            )}
-                          >
-                            {editMessage.text}
-                          </div>
-                        )}
-                        {loadingColumns.has(viewingTable) ? (
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            正在加载列信息...
-                          </div>
-                        ) : (
-                          currentTableColumns.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              <Badge variant="outline" className="h-6 px-2.5">
-                                {primaryKeyColumns.length > 0
-                                  ? `主键: ${primaryKeyColumns.map(column => column.name).join(', ')}`
-                                  : '未检测到主键'}
-                              </Badge>
-                              {canUpdateRows ? (
-                                <span>
-                                  双击单元格或点击「编辑」修改，
-                                  <kbd className="rounded border px-1 font-mono text-[10px]">
-                                    Tab
-                                  </kbd>{' '}
-                                  切换单元格，
-                                  <kbd className="rounded border px-1 font-mono text-[10px]">
-                                    Enter
-                                  </kbd>{' '}
-                                  保存，
-                                  <kbd className="rounded border px-1 font-mono text-[10px]">
-                                    Esc
-                                  </kbd>{' '}
-                                  取消，输入 <code className="font-mono text-[10px]">NULL</code>{' '}
-                                  可置空。
-                                </span>
-                              ) : primaryKeyColumns.length > 0 ? (
-                                <span>当前表没有可安全编辑的普通列。</span>
-                              ) : (
-                                <span>当前表没有主键，无法安全定位记录，暂未开放编辑和删除。</span>
-                              )}
-                            </div>
-                          )
-                        )}
-                      </div>
-                    )}
-                    <div className="min-h-0 flex-1 overflow-auto px-6 pb-4">
-                      <div className="max-h-full overflow-auto rounded-xl border border-border/60 bg-background/95 shadow-inner">
-                        <Table className="w-max min-w-full">
-                          <TableHeader className="bg-background">
-                            <TableRow>
-                              {tableData.columns.map((col, idx) => (
-                                <TableHead
-                                  key={idx}
-                                  className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-border/80 bg-background/95 text-xs font-semibold backdrop-blur supports-[backdrop-filter]:bg-background/80"
-                                >
-                                  {col}
-                                </TableHead>
-                              ))}
-                              {hasRowActions && (
-                                <TableHead className="sticky right-0 top-0 z-20 h-10 whitespace-nowrap border-b border-border/80 bg-background/95 text-xs font-semibold backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                                  操作
-                                </TableHead>
-                              )}
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {tableData.rows.map((row, rowIdx) => (
-                              <TableRow
-                                key={rowIdx}
-                                className="odd:bg-muted/[0.18] hover:bg-primary/[0.05]"
-                              >
-                                {tableData.columns.map((col, cellIdx) => {
-                                  const rowKey = makeRowKey(row);
-                                  const isEditingRow = !!rowKey && editingRowKey === rowKey;
-                                  const columnMeta = currentTableColumns.find(
-                                    column => column.name === col
-                                  );
-                                  const canEditCell =
-                                    isEditingRow &&
-                                    columnMeta &&
-                                    !columnMeta.isPrimaryKey &&
-                                    !columnMeta.isBlob &&
-                                    !columnMeta.isBit &&
-                                    !columnMeta.isGeometry;
-                                  const isDoubleClickEditable =
-                                    !isEditingRow &&
-                                    canUpdateRows &&
-                                    rowKey &&
-                                    columnMeta &&
-                                    !columnMeta.isPrimaryKey &&
-                                    !columnMeta.isBlob &&
-                                    !columnMeta.isBit &&
-                                    !columnMeta.isGeometry;
-
-                                  const handleInputKeyDown = (
-                                    e: React.KeyboardEvent<HTMLInputElement>
-                                  ) => {
-                                    if (e.key === 'Tab') {
-                                      e.preventDefault();
-                                      const cols = editableColumns.map(c => c.name);
-                                      const currentIdx = cols.indexOf(col);
-                                      if (e.shiftKey) {
-                                        if (currentIdx > 0)
-                                          setEditingFocusColumn(cols[currentIdx - 1]);
-                                      } else {
-                                        if (currentIdx < cols.length - 1) {
-                                          setEditingFocusColumn(cols[currentIdx + 1]);
-                                        } else if (editingRowData.current) {
-                                          void saveEditingRowRef.current!(editingRowData.current);
-                                        }
-                                      }
-                                    }
-                                    if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      if (editingRowData.current) {
-                                        void saveEditingRowRef.current!(editingRowData.current);
-                                      }
-                                    }
-                                  };
-
-                                  return (
-                                    <TableCell
-                                      key={cellIdx}
-                                      className={cn(
-                                        'min-w-[160px] whitespace-nowrap border-border/40 py-3 text-xs align-top',
-                                        isDoubleClickEditable &&
-                                          'cursor-pointer hover:bg-primary/[0.08] transition-colors'
-                                      )}
-                                      onDoubleClick={() => {
-                                        if (isDoubleClickEditable) {
-                                          startEditingRow(row, col);
-                                        }
-                                      }}
-                                    >
-                                      {canEditCell ? (
-                                        <Input
-                                          data-edit-col={col}
-                                          value={editingValues[col] ?? ''}
-                                          onChange={event =>
-                                            handleEditValueChange(col, event.target.value)
-                                          }
-                                          onKeyDown={handleInputKeyDown}
-                                          className="h-8 min-w-[180px] rounded-md border-border/60 bg-background px-2 font-mono text-xs"
-                                        />
-                                      ) : (
-                                        <div className="flex items-center gap-2">
-                                          {columnMeta?.isPrimaryKey && (
-                                            <KeyRound className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
-                                          )}
-                                          {renderCellContent(row[col])}
-                                        </div>
-                                      )}
-                                    </TableCell>
-                                  );
-                                })}
-                                {hasRowActions && (
-                                  <TableCell className="sticky right-0 z-10 border-l border-border/40 bg-background/95 py-2 text-xs backdrop-blur supports-[backdrop-filter]:bg-background/85">
-                                    {(() => {
-                                      const rowKey = makeRowKey(row);
-                                      const isEditingRow = !!rowKey && editingRowKey === rowKey;
-                                      const isSavingRow = !!rowKey && savingRowKey === rowKey;
-
-                                      if (!rowKey) {
-                                        return (
-                                          <span className="text-muted-foreground">不可操作</span>
-                                        );
-                                      }
-
-                                      return isEditingRow ? (
-                                        <div className="flex items-center gap-1">
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-7 px-2 text-xs"
-                                            disabled={isSavingRow}
-                                            onClick={() => void saveEditingRow(row)}
-                                          >
-                                            {isSavingRow ? (
-                                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                                            ) : (
-                                              <Save className="mr-1 h-3 w-3" />
-                                            )}
-                                            保存
-                                          </Button>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-7 px-2 text-xs"
-                                            disabled={isSavingRow}
-                                            onClick={cancelEditingRow}
-                                          >
-                                            <X className="mr-1 h-3 w-3" />
-                                            取消
-                                          </Button>
-                                          {canDeleteRows && (
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                                              disabled={isSavingRow}
-                                              onClick={() => void handleDeleteRow(row)}
-                                            >
-                                              <Trash2 className="mr-1 h-3 w-3" />
-                                              删除
-                                            </Button>
-                                          )}
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center gap-1">
-                                          {canUpdateRows && (
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="h-7 px-2 text-xs"
-                                              disabled={savingRowKey !== null}
-                                              onClick={() => startEditingRow(row)}
-                                            >
-                                              <Pencil className="mr-1 h-3 w-3" />
-                                              编辑
-                                            </Button>
-                                          )}
-                                          {canDeleteRows && (
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                                              disabled={savingRowKey !== null}
-                                              onClick={() => void handleDeleteRow(row)}
-                                            >
-                                              <Trash2 className="mr-1 h-3 w-3" />
-                                              删除
-                                            </Button>
-                                          )}
-                                        </div>
-                                      );
-                                    })()}
-                                  </TableCell>
-                                )}
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
+                  currentTableColumns.length > 0 && (
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <Badge variant="outline" className="h-5 px-2 text-[10px]">
+                        {primaryKeyColumns.length > 0
+                          ? `PK: ${primaryKeyColumns.map(c => c.name).join(', ')}`
+                          : '无主键'}
+                      </Badge>
+                      {canUpdateRows && (
+                        <span>双击编辑 · Tab切换 · Enter保存 · Esc取消</span>
+                      )}
                     </div>
-
-                    {/* Pagination */}
-                    {tableData && (
-                      <div className="flex flex-shrink-0 flex-col gap-3 border-t border-border/60 bg-background/80 px-6 pb-6 pt-4 backdrop-blur supports-[backdrop-filter]:bg-background/70 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <span className="text-xs text-muted-foreground">
-                            第 {currentPage + 1} / {Math.max(1, totalPages)} 页，共{' '}
-                            {(tableData.totalCount || 0).toLocaleString()} 条
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">每页</span>
-                            <Select
-                              value={String(pageSize)}
-                              onValueChange={v => handlePageSizeChange(Number(v))}
-                            >
-                              <SelectTrigger className="h-7 w-[80px] text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent side="top">
-                                {PAGE_SIZE_OPTIONS.map(size => (
-                                  <SelectItem key={size} value={String(size)}>
-                                    {size} 条
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 self-end lg:self-auto">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            disabled={currentPage === 0}
-                            onClick={() => handlePageChange(0)}
-                          >
-                            <ChevronsLeft className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            disabled={currentPage === 0}
-                            onClick={() => handlePageChange(currentPage - 1)}
-                          >
-                            <ChevronLeft className="h-3 w-3" />
-                          </Button>
-                          <span className="text-xs text-muted-foreground mx-2">
-                            {currentPage + 1} / {totalPages}
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            disabled={currentPage >= totalPages - 1}
-                            onClick={() => handlePageChange(currentPage + 1)}
-                          >
-                            <ChevronRight className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            disabled={currentPage >= totalPages - 1}
-                            onClick={() => handlePageChange(totalPages - 1)}
-                          >
-                            <ChevronsRight className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </>
+                  )
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            )}
+
+            {/* Table Data */}
+            <div className="min-h-0 flex-1 overflow-auto">
+              {loading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : tableData.columns.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                  暂无数据
+                </div>
+              ) : (
+                <Table className="w-max min-w-full">
+                  <TableHeader>
+                    <TableRow>
+                      {tableData.columns.map((col, idx) => {
+                        const colMeta = currentTableColumns.find(c => c.name === col);
+                        return (
+                          <TableHead
+                            key={idx}
+                            className="sticky top-0 z-10 h-8 whitespace-nowrap bg-muted/30 text-[11px] font-medium"
+                          >
+                            {col}
+                            {colMeta?.isJson && (
+                              <span className="ml-1 text-orange-500">(JSON)</span>
+                            )}
+                          </TableHead>
+                        );
+                      })}
+                      {hasRowActions && (
+                        <TableHead className="sticky right-0 top-0 z-20 h-8 whitespace-nowrap bg-muted/30 text-[11px] font-medium w-20">
+                          操作
+                        </TableHead>
+                      )}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tableData.rows.map((row, rowIdx) => (
+                      <TableRow
+                        key={rowIdx}
+                        className="odd:bg-muted/[0.08] hover:bg-primary/[0.04]"
+                      >
+                        {tableData.columns.map((col, cellIdx) => {
+                          const rowKey = makeRowKey(row);
+                          const isEditingRow = !!rowKey && editingRowKey === rowKey;
+                          const columnMeta = currentTableColumns.find(
+                            column => column.name === col
+                          );
+                          const canEditCell =
+                            isEditingRow &&
+                            columnMeta &&
+                            !columnMeta.isPrimaryKey &&
+                            !columnMeta.isBlob &&
+                            !columnMeta.isBit &&
+                            !columnMeta.isGeometry;
+                          const isDoubleClickEditable =
+                            !isEditingRow &&
+                            canUpdateRows &&
+                            rowKey &&
+                            columnMeta &&
+                            !columnMeta.isPrimaryKey &&
+                            !columnMeta.isBlob &&
+                            !columnMeta.isBit &&
+                            !columnMeta.isGeometry;
+
+                          const handleInputKeyDown = (
+                            e: React.KeyboardEvent<HTMLInputElement>
+                          ) => {
+                            if (e.key === 'Tab') {
+                              e.preventDefault();
+                              const cols = editableColumns.map(c => c.name);
+                              const currentIdx = cols.indexOf(col);
+                              if (e.shiftKey) {
+                                if (currentIdx > 0)
+                                  setEditingFocusColumn(cols[currentIdx - 1]);
+                              } else {
+                                if (currentIdx < cols.length - 1) {
+                                  setEditingFocusColumn(cols[currentIdx + 1]);
+                                } else if (editingRowData.current) {
+                                  void saveEditingRowRef.current!(editingRowData.current);
+                                }
+                              }
+                            }
+                            if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (editingRowData.current) {
+                                void saveEditingRowRef.current!(editingRowData.current);
+                              }
+                            }
+                          };
+
+                          return (
+                            <TableCell
+                              key={cellIdx}
+                              className={cn(
+                                'min-w-[140px] whitespace-nowrap py-1.5 px-3 text-xs align-top',
+                                isDoubleClickEditable &&
+                                  'cursor-pointer hover:bg-primary/[0.06] transition-colors'
+                              )}
+                              onDoubleClick={() => {
+                                if (isDoubleClickEditable) {
+                                  startEditingRow(row, col);
+                                }
+                              }}
+                            >
+                              {canEditCell ? (
+                                <Input
+                                  data-edit-col={col}
+                                  value={editingValues[col] ?? ''}
+                                  onChange={event =>
+                                    handleEditValueChange(col, event.target.value)
+                                  }
+                                  onKeyDown={handleInputKeyDown}
+                                  className="h-7 min-w-[160px] rounded px-2 font-mono text-xs"
+                                />
+                              ) : (
+                                <div className="flex items-center gap-1.5">
+                                  {columnMeta?.isPrimaryKey && (
+                                    <KeyRound className="h-3 w-3 flex-shrink-0 text-amber-500" />
+                                  )}
+                                  {renderCellContent(row[col])}
+                                </div>
+                              )}
+                            </TableCell>
+                          );
+                        })}
+                        {hasRowActions && (
+                          <TableCell className="sticky right-0 z-10 border-l border-border/30 bg-background py-1 text-xs w-20">
+                            {(() => {
+                              const rowKey = makeRowKey(row);
+                              const isEditingRow = !!rowKey && editingRowKey === rowKey;
+                              const isSavingRow = !!rowKey && savingRowKey === rowKey;
+
+                              if (!rowKey) {
+                                return <span className="text-muted-foreground text-[10px]">—</span>;
+                              }
+
+                              return isEditingRow ? (
+                                <div className="flex items-center gap-0.5">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-1.5 text-[11px]"
+                                    disabled={isSavingRow}
+                                    onClick={() => void saveEditingRow(row)}
+                                  >
+                                    {isSavingRow ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Save className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-1.5 text-[11px]"
+                                    disabled={isSavingRow}
+                                    onClick={cancelEditingRow}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                  {canDeleteRows && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 px-1.5 text-[11px] text-destructive hover:text-destructive"
+                                      disabled={isSavingRow}
+                                      onClick={() => void handleDeleteRow(row)}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-0.5">
+                                  {canUpdateRows && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 px-1.5 text-[11px]"
+                                      disabled={savingRowKey !== null}
+                                      onClick={() => startEditingRow(row)}
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                  {canDeleteRows && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 px-1.5 text-[11px] text-destructive hover:text-destructive"
+                                      disabled={savingRowKey !== null}
+                                      onClick={() => void handleDeleteRow(row)}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+
+            {/* Pagination */}
+            {tableData && (
+              <div className="flex-shrink-0 border-t border-border/50 px-4 py-2 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-muted-foreground">
+                    {currentPage + 1}/{Math.max(1, totalPages)} · {(tableData.totalCount || 0).toLocaleString()} 条
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-muted-foreground">每页</span>
+                    <Select
+                      value={String(pageSize)}
+                      onValueChange={v => handlePageSizeChange(Number(v))}
+                    >
+                      <SelectTrigger className="h-6 w-[68px] text-[11px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent side="top">
+                        {PAGE_SIZE_OPTIONS.map(size => (
+                          <SelectItem key={size} value={String(size)}>
+                            {size}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex items-center gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    disabled={currentPage === 0}
+                    onClick={() => handlePageChange(0)}
+                  >
+                    <ChevronsLeft className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    disabled={currentPage === 0}
+                    onClick={() => handlePageChange(currentPage - 1)}
+                  >
+                    <ChevronLeft className="h-3 w-3" />
+                  </Button>
+                  <span className="text-[11px] text-muted-foreground mx-1">
+                    {currentPage + 1}/{totalPages}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    disabled={currentPage >= totalPages - 1}
+                    onClick={() => handlePageChange(currentPage + 1)}
+                  >
+                    <ChevronRight className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    disabled={currentPage >= totalPages - 1}
+                    onClick={() => handlePageChange(totalPages - 1)}
+                  >
+                    <ChevronsRight className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <div className="text-center">
-              <Table2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">双击表名查看数据</p>
+              <Table2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              <p className="text-xs">双击表名查看数据</p>
             </div>
           </div>
         )}
       </div>
 
-      <CreateDatabaseDialog
-        open={showCreateDatabase}
-        onOpenChange={setShowCreateDatabase}
-        onSuccess={dbName => {
-          if (activeConnection.connection?.id) {
-            void loadDatabases(activeConnection.connection.id);
-            setSelectedDatabase(dbName);
-          }
-        }}
-      />
-
       <CreateTableDialog
         open={showCreateTable}
         onOpenChange={setShowCreateTable}
         onSuccess={handleCreateSuccess}
-      />
-
-      <CreateDatabaseDialog
-        open={showCreateDatabase}
-        onOpenChange={setShowCreateDatabase}
-        onSuccess={() => {
-          if (activeConnection.connection?.id) {
-            loadDatabases(activeConnection.connection.id);
-          }
-        }}
       />
 
       <Dialog
@@ -1812,13 +1703,18 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                       id={`insert-${column.name}`}
                       value={insertValues[column.name] ?? ''}
                       onChange={event => handleInsertValueChange(column.name, event.target.value)}
-                      placeholder={`${column.type}${column.default !== null ? `，默认 ${column.default}` : ''}${isAutoIncrement ? '，自动递增' : ''}`}
+                      placeholder={`${column.type}${column.isJson ? '（JSON 格式）' : ''}${column.default !== null ? `，默认 ${column.default}` : ''}${isAutoIncrement ? '，自动递增' : ''}`}
                       className="mt-4 h-12 rounded-xl border-border/60 bg-background px-4 font-mono text-sm shadow-inner transition-all focus:border-primary/40 focus:bg-background"
                     />
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                       <span className="rounded-full bg-muted px-2.5 py-1 font-medium">
                         {column.type}
                       </span>
+                      {column.isJson && (
+                        <span className="rounded-full bg-orange-100 px-2.5 py-1 font-medium text-orange-600">
+                          值(JSON 格式)
+                        </span>
+                      )}
                       <span>{column.nullable ? '允许 NULL' : '非空约束'}</span>
                       {column.default !== null && <span>默认值: {column.default}</span>}
                       {isAutoIncrement && <span>自动递增</span>}
@@ -1937,6 +1833,12 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
             loadTableData(viewingTable, currentPage);
           }
         }}
+      />
+
+      <CreateDatabaseDialog
+        open={showCreateDatabase}
+        onOpenChange={setShowCreateDatabase}
+        onSuccess={handleCreateDatabaseSuccess}
       />
     </div>
   );

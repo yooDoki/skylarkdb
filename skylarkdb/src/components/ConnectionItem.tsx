@@ -1,7 +1,7 @@
 import { memo, useCallback, useState } from 'react';
 import { DatabaseConnection, ConnectionStatus } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Database, Server, Play, Power, Edit2, Trash2, MoreVertical, Copy } from 'lucide-react';
+import { Database, Server, Play, Power, Trash2, MoreVertical, Copy } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
 interface ConnectionItemProps {
@@ -107,10 +107,10 @@ export const ConnectionItem = memo(function ConnectionItem({
   return (
     <div
       className={cn(
-        'group relative flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 cursor-pointer',
+        'group relative flex items-center gap-2 px-2 py-1.5 rounded-md border transition-colors cursor-pointer',
         isActive
-          ? 'border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-500/15'
-          : 'border-border/50 bg-card hover:border-primary/30 hover:bg-accent/30'
+          ? 'border-emerald-500/25 bg-emerald-500/8'
+          : 'border-transparent hover:bg-muted/50'
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => {
@@ -119,71 +119,48 @@ export const ConnectionItem = memo(function ConnectionItem({
       }}
       onContextMenu={handleContextMenu}
     >
-      {/* Status Indicator */}
-      <div
-        className={cn(
-          'w-2.5 h-2.5 rounded-full flex-shrink-0',
-          getStatusColor(),
-          isActive && status === 'connected' && 'animate-pulse'
-        )}
-      />
-
-      {/* Database Icon */}
-      <div
-        className={cn(
-          'flex-shrink-0 p-2 rounded-lg transition-all duration-200',
-          connection.type === 'mysql'
-            ? isActive
-              ? 'bg-mysql/20'
-              : 'bg-mysql/10'
-            : isActive
-              ? 'bg-redis/20'
-              : 'bg-redis/10'
-        )}
-      >
+      {/* Status Indicator + Icon combined */}
+      <div className="flex-shrink-0 relative">
         {connection.type === 'mysql' ? (
-          <Database className="h-4 w-4 text-mysql" />
+          <Database className={cn('h-4 w-4', isActive ? 'text-mysql' : 'text-muted-foreground')} />
         ) : (
-          <Server className="h-4 w-4 text-redis" />
+          <Server className={cn('h-4 w-4', isActive ? 'text-redis' : 'text-muted-foreground')} />
         )}
+        <div
+          className={cn(
+            'absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full border border-background',
+            getStatusColor(),
+            isActive && status === 'connected' && 'animate-pulse'
+          )}
+        />
       </div>
 
       {/* Connection Info */}
       <div className="flex-1 min-w-0 overflow-hidden">
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              'font-medium text-sm truncate',
-              isActive ? 'text-foreground' : 'text-foreground/90'
-            )}
-          >
-            {connection.name}
-          </span>
-          {connection.readOnly && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 bg-amber-500/10 text-amber-600">
-              只读
-            </span>
+        <span
+          className={cn(
+            'block text-xs truncate',
+            isActive ? 'font-medium text-foreground' : 'text-foreground/80'
           )}
-          <span
-            className={cn(
-              'text-[10px] px-1.5 py-0.5 rounded font-medium uppercase flex-shrink-0',
-              connection.type === 'mysql' ? 'bg-mysql/10 text-mysql' : 'bg-redis/10 text-redis'
-            )}
-          >
-            {connection.type}
-          </span>
-        </div>
-        <div className="text-xs text-muted-foreground mt-0.5">
+        >
+          {connection.name}
+        </span>
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
           <span className="font-mono truncate">
             {connection.host}:{connection.port}
           </span>
+          {connection.readOnly && (
+            <span className="px-1 rounded flex-shrink-0 bg-amber-500/10 text-amber-600 text-[9px]">
+              只读
+            </span>
+          )}
         </div>
       </div>
 
       {/* Action Buttons */}
       <div
         className={cn(
-          'flex items-center gap-0.5 transition-all duration-200',
+          'flex items-center gap-0.5 flex-shrink-0 transition-opacity',
           isHovered || isActive ? 'opacity-100' : 'opacity-0'
         )}
       >
@@ -191,58 +168,49 @@ export const ConnectionItem = memo(function ConnectionItem({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 rounded-md text-destructive hover:text-destructive hover:bg-destructive/10"
+            className="h-5 w-5 rounded text-destructive hover:text-destructive hover:bg-destructive/10"
             onClick={handleDisconnect}
             title="断开连接"
           >
-            <Power className="h-3.5 w-3.5" />
+            <Power className="h-3 w-3" />
           </Button>
         ) : (
           <Button
             variant="ghost"
             size="icon"
             className={cn(
-              'h-7 w-7 rounded-md',
-              'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-100',
+              'h-5 w-5 rounded',
+              'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50',
               status === 'connecting' && 'opacity-50 cursor-not-allowed'
             )}
             onClick={handleConnect}
             disabled={status === 'connecting'}
             title="连接"
           >
-            <Play className="h-3.5 w-3.5" />
+            <Play className="h-3 w-3" />
           </Button>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 rounded-md hover:bg-muted"
-          onClick={handleEdit}
-          title="编辑"
-        >
-          <Edit2 className="h-3 w-3" />
-        </Button>
         <div className="relative">
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 rounded-md hover:bg-muted"
+            className="h-5 w-5 rounded hover:bg-muted"
             onClick={handleMenuClick}
             title="更多操作"
           >
             <MoreVertical className="h-3 w-3" />
           </Button>
           {showMenu && (
-            <div className="absolute right-0 top-full mt-1 w-32 py-1 bg-popover border border-border rounded-lg shadow-lg z-50">
+            <div className="absolute right-0 top-full mt-0.5 w-28 py-0.5 bg-popover border border-border rounded-md shadow-lg z-50">
               <button
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted transition-colors"
+                className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] hover:bg-muted transition-colors"
                 onClick={handleDuplicate}
               >
                 <Copy className="h-3 w-3" />
                 复制连接
               </button>
               <button
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 transition-colors"
+                className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-destructive hover:bg-destructive/10 transition-colors"
                 onClick={handleDelete}
               >
                 <Trash2 className="h-3 w-3" />
