@@ -109,8 +109,8 @@ export const ConnectionItem = memo(function ConnectionItem({
       className={cn(
         'group relative flex items-center gap-2 px-2 py-1.5 rounded-md border transition-colors cursor-pointer',
         isActive
-          ? 'border-emerald-500/25 bg-emerald-500/8'
-          : 'border-transparent hover:bg-muted/50'
+          ? 'border-emerald-500/25 bg-emerald-500/8 dark:border-emerald-400/35 dark:bg-emerald-500/12'
+          : 'border-transparent hover:bg-muted/50 dark:hover:bg-muted/40'
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => {
@@ -150,7 +150,7 @@ export const ConnectionItem = memo(function ConnectionItem({
             {connection.host}:{connection.port}
           </span>
           {connection.readOnly && (
-            <span className="px-1 rounded flex-shrink-0 bg-amber-500/10 text-amber-600 text-[9px]">
+            <span className="rounded flex-shrink-0 bg-amber-500/10 px-1 text-[9px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
               只读
             </span>
           )}
@@ -180,7 +180,7 @@ export const ConnectionItem = memo(function ConnectionItem({
             size="icon"
             className={cn(
               'h-5 w-5 rounded',
-              'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50',
+              'text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-300',
               status === 'connecting' && 'opacity-50 cursor-not-allowed'
             )}
             onClick={handleConnect}

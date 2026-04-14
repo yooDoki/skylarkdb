@@ -42,6 +42,10 @@ export interface MySQLColumn {
   isGeometry: boolean;
   enumValues: string[] | null;
   maxLength: string | null;
+  /** 外键引用的表名 */
+  referencedTable?: string | null;
+  /** 外键引用的列名 */
+  referencedColumn?: string | null;
 }
 
 export interface QueryResult {

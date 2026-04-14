@@ -51,6 +51,7 @@ import {
   X,
   AlertTriangle,
   Upload,
+  Link2,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import {
@@ -856,6 +857,28 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
     [clickTimer, pendingTable, loadTableData]
   );
 
+  // 点击外键值时跳转到关联表
+  const handleForeignKeyClick = useCallback(
+    (referencedTableName: string, fkValue: unknown) => {
+      if (pendingTable) {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+      }
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      setViewingTable(referencedTableName);
+      setPendingTable(referencedTableName);
+      setCurrentPage(0);
+
+      // TODO: 可以通过 fkValue 过滤关联表的记录，目前先打开目标表
+      loadTableData(referencedTableName, 0, controller.signal);
+    },
+    [pendingTable, loadTableData]
+  );
+
   const handlePageChange = useCallback(
     (newPage: number) => {
       if (!viewingTable) return;
@@ -1038,8 +1061,8 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
   return (
     <div className="h-full min-h-0 flex overflow-hidden">
       {/* Sidebar - Tables */}
-      <div className="w-60 flex-shrink-0 flex flex-col border-r border-border/50 bg-muted/20">
-        <div className="flex-shrink-0 px-3 py-2 border-b border-border/50 space-y-2">
+      <div className="w-60 flex-shrink-0 flex flex-col border-r border-border/60 bg-muted/25 dark:border-border dark:bg-muted/45">
+        <div className="flex-shrink-0 px-3 py-2 border-b border-border/60 dark:border-border/80 space-y-2">
           <div className="flex items-center gap-1.5">
             <Button
               variant="ghost"
@@ -1134,8 +1157,8 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                     className={cn(
                       'group w-full flex items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors',
                       viewingTable === table.name
-                        ? 'bg-primary/10 text-primary'
-                        : 'hover:bg-muted/60'
+                        ? 'bg-primary/10 text-primary shadow-sm dark:bg-primary/20 dark:text-primary'
+                        : 'hover:bg-muted/60 dark:hover:bg-muted/50'
                     )}
                   >
                     {expandedTables.has(table.name) ? (
@@ -1175,7 +1198,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                             >
                               <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
                                 {column.isPrimaryKey ? (
-                                  <KeyRound className="h-2.5 w-2.5 text-amber-500" />
+                                  <KeyRound className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400" />
                                 ) : column.extra.includes('auto_increment') ? (
                                   <KeyRound className="h-2.5 w-2.5 text-muted-foreground" />
                                 ) : (
@@ -1185,7 +1208,9 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                               <span className="truncate flex-1 text-foreground/80">{column.name}</span>
                               <span className="text-muted-foreground/60 text-[10px]">{column.fullType}</span>
                               {column.isPrimaryKey && (
-                                <span className="text-[9px] text-amber-600 font-medium">PK</span>
+                                <span className="text-[9px] font-medium text-amber-700 dark:text-amber-400">
+                                  PK
+                                </span>
                               )}
                               <button
                                 className="flex-shrink-0 opacity-0 group-hover/column:opacity-100 hover:text-destructive text-muted-foreground transition-opacity"
@@ -1221,7 +1246,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
         {viewingTable && tableData ? (
           <>
             {/* Table Header Bar */}
-            <div className="flex-shrink-0 border-b border-border/50 px-4 py-2">
+            <div className="flex-shrink-0 border-b border-border/60 bg-background/80 px-4 py-2 backdrop-blur-[2px] dark:border-border/80">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
                   <Table2 className="h-4 w-4 text-mysql flex-shrink-0" />
@@ -1230,7 +1255,10 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                     {tableData.isApproximateCount && '~'}{tableData.totalCount.toLocaleString()} 条 · {tableData.columns.length} 列
                   </span>
                   {isReadOnly && (
-                    <Badge variant="outline" className="text-[9px] h-4 border-amber-300 text-amber-600">
+                    <Badge
+                      variant="outline"
+                      className="text-[9px] h-4 border-amber-300 text-amber-700 dark:border-amber-500/45 dark:bg-amber-500/10 dark:text-amber-400"
+                    >
                       只读
                     </Badge>
                   )}
@@ -1295,8 +1323,8 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                     className={cn(
                       'mb-2 rounded-md border px-2.5 py-1.5 text-xs',
                       editMessage.type === 'success'
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border-destructive/30 bg-destructive/5 text-destructive'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/12 dark:text-emerald-300'
+                        : 'border-destructive/30 bg-destructive/5 text-destructive dark:border-destructive/45 dark:bg-destructive/15'
                     )}
                   >
                     {editMessage.text}
@@ -1325,7 +1353,10 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
             )}
 
             {/* Table Data */}
-            <div ref={tableScrollRef} className="min-h-0 flex-1 overflow-auto rounded-md border border-border/40 bg-background">
+            <div
+              ref={tableScrollRef}
+              className="min-h-0 flex-1 overflow-auto rounded-md border border-border/50 bg-background shadow-[inset_0_1px_0_0_hsl(var(--border)/0.35)] dark:border-border/80 dark:shadow-[inset_0_1px_0_0_hsl(var(--foreground)/0.06)]"
+            >
               {loading ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -1343,17 +1374,17 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                         return (
                           <TableHead
                             key={idx}
-                            className="sticky top-0 z-10 h-8 whitespace-nowrap bg-muted/30 text-[11px] font-medium"
+                            className="sticky top-0 z-10 h-8 whitespace-nowrap bg-muted/40 text-[11px] font-medium shadow-[0_1px_0_0_hsl(var(--border)/0.6)] dark:bg-muted/55 dark:shadow-[0_1px_0_0_hsl(var(--border)/0.85)]"
                           >
                             {col}
                             {colMeta?.isJson && (
-                              <span className="ml-1 text-orange-500">(JSON)</span>
+                              <span className="ml-1 text-orange-600 dark:text-orange-400">(JSON)</span>
                             )}
                           </TableHead>
                         );
                       })}
                       {hasRowActions && (
-                        <TableHead className="sticky right-0 top-0 z-20 h-8 whitespace-nowrap bg-muted/30 text-[11px] font-medium w-20">
+                        <TableHead className="sticky right-0 top-0 z-20 h-8 w-20 whitespace-nowrap bg-muted/40 text-[11px] font-medium shadow-[-1px_0_0_0_hsl(var(--border)/0.5)] dark:bg-muted/55 dark:shadow-[-1px_0_0_0_hsl(var(--border)/0.75)]">
                           操作
                         </TableHead>
                       )}
@@ -1389,9 +1420,9 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                     transform: `translateY(${virtualRow.start}px)`,
                                   }}
                                   className={cn(
-                                    'flex items-center border-b border-border/30 hover:bg-primary/[0.04]',
-                                    virtualRow.index % 2 === 1 && 'bg-muted/[0.08]',
-                                    isEditingRow && 'bg-primary/[0.06]'
+                                    'flex items-center border-b border-border/40 hover:bg-primary/[0.04] dark:border-border/50',
+                                    virtualRow.index % 2 === 1 && 'bg-muted/[0.08] dark:bg-muted/20',
+                                    isEditingRow && 'bg-primary/[0.06] dark:bg-primary/15'
                                   )}
                                 >
                                   {tableData.columns.map((col, cellIdx) => {
@@ -1467,16 +1498,32 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                         ) : (
                                           <div className="flex items-center gap-1.5">
                                             {columnMeta?.isPrimaryKey && (
-                                              <KeyRound className="h-3 w-3 flex-shrink-0 text-amber-500" />
+                                              <KeyRound className="h-3 w-3 flex-shrink-0 text-amber-600 dark:text-amber-400" />
                                             )}
-                                            {renderCellContent(row[col])}
+                                            {columnMeta?.referencedTable && !canEditCell ? (
+                                              <button
+                                                className="flex cursor-pointer items-center gap-1 transition-colors hover:text-blue-600 dark:hover:text-blue-400"
+                                                title={`外键: ${col} → ${columnMeta.referencedTable}.${columnMeta.referencedColumn || 'id'}`}
+                                                onClick={() =>
+                                                  handleForeignKeyClick(
+                                                    columnMeta.referencedTable,
+                                                    row[col]
+                                                  )
+                                                }
+                                              >
+                                                <Link2 className="h-3 w-3 flex-shrink-0 text-blue-400" />
+                                                {renderCellContent(row[col])}
+                                              </button>
+                                            ) : (
+                                              renderCellContent(row[col])
+                                            )}
                                           </div>
                                         )}
                                       </div>
                                     );
                                   })}
                                   {hasRowActions && (
-                                    <div className="sticky right-0 z-10 border-l border-border/30 bg-background py-1 text-xs w-20 flex items-center gap-0.5 px-0.5">
+                                    <div className="sticky right-0 z-10 flex w-20 items-center gap-0.5 border-l border-border/40 bg-background/95 py-1 text-xs shadow-[-4px_0_12px_-8px_hsl(var(--background))] backdrop-blur-sm dark:border-border/55 dark:bg-background/90">
                                       {(() => {
                                         const isSavingRow = !!rowKey && savingRowKey === rowKey;
 
@@ -1559,7 +1606,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                       tableData.rows.map((row, rowIdx) => (
                         <TableRow
                           key={rowIdx}
-                          className="odd:bg-muted/[0.08] hover:bg-primary/[0.04]"
+                          className="odd:bg-muted/[0.08] hover:bg-primary/[0.04] dark:odd:bg-muted/18"
                         >
                           {tableData.columns.map((col, cellIdx) => {
                             const rowKey = makeRowKey(row);
@@ -1638,16 +1685,32 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                 ) : (
                                   <div className="flex items-center gap-1.5">
                                     {columnMeta?.isPrimaryKey && (
-                                      <KeyRound className="h-3 w-3 flex-shrink-0 text-amber-500" />
+                                      <KeyRound className="h-3 w-3 flex-shrink-0 text-amber-600 dark:text-amber-400" />
                                     )}
-                                    {renderCellContent(row[col])}
+                                    {columnMeta?.referencedTable && !canEditCell ? (
+                                      <button
+                                        className="flex cursor-pointer items-center gap-1 transition-colors hover:text-blue-600 dark:hover:text-blue-400"
+                                        title={`外键: ${col} → ${columnMeta.referencedTable}.${columnMeta.referencedColumn || 'id'}`}
+                                        onClick={() =>
+                                          handleForeignKeyClick(
+                                            columnMeta.referencedTable,
+                                            row[col]
+                                          )
+                                        }
+                                      >
+                                        <Link2 className="h-3 w-3 flex-shrink-0 text-blue-400" />
+                                        {renderCellContent(row[col])}
+                                      </button>
+                                    ) : (
+                                      renderCellContent(row[col])
+                                    )}
                                   </div>
                                 )}
                               </TableCell>
                             );
                           })}
                           {hasRowActions && (
-                            <TableCell className="sticky right-0 z-10 border-l border-border/30 bg-background py-1 text-xs w-20">
+                            <TableCell className="sticky right-0 z-10 w-20 border-l border-border/40 bg-background/95 py-1 text-xs shadow-[-4px_0_12px_-8px_hsl(var(--background))] backdrop-blur-sm dark:border-border/55 dark:bg-background/90">
                               {(() => {
                                 const rowKey = makeRowKey(row);
                                 const isEditingRow = !!rowKey && editingRowKey === rowKey;
@@ -1732,7 +1795,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
 
             {/* Pagination */}
             {tableData && (
-              <div className="flex-shrink-0 border-t border-border/50 px-4 py-2 flex items-center justify-between">
+              <div className="flex flex-shrink-0 items-center justify-between border-t border-border/60 bg-muted/10 px-4 py-2 dark:border-border/80 dark:bg-muted/20">
                 <div className="flex items-center gap-3">
                   <span className="text-[11px] text-muted-foreground">
                     {currentPage + 1}/{Math.max(1, totalPages)} · {(tableData.totalCount || 0).toLocaleString()} 条
@@ -1864,7 +1927,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                 <span>字段按卡片分组，录入更易扫读</span>
               </div>
               <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1.5 shadow-sm">
-                <KeyRound className="h-3.5 w-3.5 text-amber-500" />
+                <KeyRound className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                 <span>主键或自增列可留空时会交给数据库自动处理</span>
               </div>
             </div>
@@ -1919,7 +1982,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                         {column.type}
                       </span>
                       {column.isJson && (
-                        <span className="rounded-full bg-orange-100 px-2.5 py-1 font-medium text-orange-600">
+                        <span className="rounded-full bg-orange-100 px-2.5 py-1 font-medium text-orange-700 dark:bg-orange-950/60 dark:text-orange-300">
                           值(JSON 格式)
                         </span>
                       )}

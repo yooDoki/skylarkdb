@@ -1,3 +1,5 @@
 .env
 .secrets/
 TAURI_SIGNING_KEYS.md
+# 根目录勿提交 latest.json（更新索引用 GitHub Release 上的资产）
+/latest.json

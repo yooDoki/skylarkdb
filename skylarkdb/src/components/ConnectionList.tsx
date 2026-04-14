@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DatabaseConnection } from '@/types';
-import { Database, Plus, Search, X, Play, Moon, Sun } from 'lucide-react';
+import { Database, Plus, Search, X, Play } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { logError } from '@/utils/errorHandler';
 import {
@@ -66,8 +66,6 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
     y: 0,
     connection: null,
   });
-  const [darkMode, setDarkMode] = useState(false);
-
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -298,34 +296,8 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
           collapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'
         )}
       >
-        {/* Brand + Controls */}
-        <div className="px-3 pt-3 pb-1 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Database className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold">
-              <span className="gradient-text">Skylark</span>
-              <span className="text-foreground">DB</span>
-            </span>
-          </div>
-          <div className="flex items-center gap-0.5">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                setDarkMode(!darkMode);
-                document.documentElement.classList.toggle('dark');
-              }}
-              className="h-7 w-7"
-              title="切换主题"
-            >
-              {darkMode ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-            </Button>
-            <SettingsDialog />
-          </div>
-        </div>
-
         {/* Search + New Button */}
-        <div className="px-3 py-1.5 flex items-center gap-2">
+        <div className="flex items-center gap-2 px-3 pb-1.5 pt-2">
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
             <Input
@@ -447,6 +419,10 @@ export function ConnectionList({ collapsed = false }: ConnectionListProps) {
               })}
             </div>
           )}
+        </div>
+
+        <div className="flex shrink-0 items-center justify-start border-t border-border/60 px-3 py-2 dark:border-border/80">
+          <SettingsDialog />
         </div>
       </div>
 

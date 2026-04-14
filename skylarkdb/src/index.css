@@ -33,38 +33,33 @@
   }
 
   .dark {
-    /* 更深的背景色，减少眼睛疲劳 */
-    --background: 220 13% 8%;
-    --foreground: 210 20% 96%;
-    --card: 220 13% 10%;
-    --card-foreground: 210 20% 96%;
-    --popover: 220 13% 10%;
-    --popover-foreground: 210 20% 96%;
-    /* 更明亮的主色调 */
-    --primary: 217 91% 65%;
-    --primary-foreground: 220 13% 8%;
-    /* 次级颜色增加对比度 */
-    --secondary: 220 13% 16%;
-    --secondary-foreground: 210 20% 96%;
-    /* 静音区域更明显 */
-    --muted: 220 13% 16%;
-    --muted-foreground: 215 15% 60%;
-    /* 强调色 */
-    --accent: 220 13% 20%;
-    --accent-foreground: 210 20% 96%;
-    /* 错误色更柔和 */
-    --destructive: 0 70% 55%;
+    /*
+     * 中性灰底 + 青绿主色（Teal）：底色为纯灰中性色，主色与焦点环为松石青。
+     */
+    --background: 0 0% 7%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 11%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 172 56% 48%;
+    --primary-foreground: 168 40% 7%;
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 94%;
+    --muted: 0 0% 13%;
+    --muted-foreground: 0 0% 58%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 0 65% 52%;
     --destructive-foreground: 0 0% 100%;
-    /* 边框更明显 */
-    --border: 220 13% 20%;
-    --input: 220 13% 18%;
-    --ring: 217 91% 60%;
+    --border: 0 0% 19%;
+    --input: 0 0% 12%;
+    --ring: 172 50% 42%;
 
-    /* Database brand colors - dark mode optimized */
-    --mysql: 205 90% 65%;
-    --mysql-light: 205 50% 15%;
-    --redis: 8 80% 65%;
-    --redis-light: 8 50% 15%;
+    --mysql: 188 70% 52%;
+    --mysql-light: 188 32% 14%;
+    --redis: 16 82% 58%;
+    --redis-light: 16 38% 14%;
   }
 }
 
@@ -115,14 +110,26 @@
   background-clip: content-box;
 }
 
+.dark ::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.38);
+}
+
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.55);
 }
 
 /* Firefox scrollbar */
 * {
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--muted-foreground) / 0.3) hsl(var(--muted) / 0.3);
+}
+
+.dark * {
+  scrollbar-color: hsl(var(--muted-foreground) / 0.42) hsl(var(--muted) / 0.35);
 }
 
 /* Prevent layout shift */
@@ -442,11 +449,11 @@
 
 /* Dark mode table enhancements */
 .dark table {
-  border-color: hsl(var(--border) / 0.5);
+  border-color: hsl(var(--border) / 0.65);
 }
 
 .dark tr {
-  border-color: hsl(var(--border) / 0.4);
+  border-color: hsl(var(--border) / 0.5);
 }
 
 .dark tr:hover {
@@ -454,12 +461,13 @@
 }
 
 .dark th {
-  color: hsl(var(--muted-foreground) / 0.9);
-  border-bottom-color: hsl(var(--border) / 0.6);
+  color: hsl(var(--muted-foreground));
+  background-color: hsl(var(--muted) / 0.45);
+  border-bottom-color: hsl(var(--border) / 0.7);
 }
 
 .dark td {
-  border-bottom-color: hsl(var(--border) / 0.3);
+  border-bottom-color: hsl(var(--border) / 0.45);
 }
 
 /* Dark mode input enhancements */

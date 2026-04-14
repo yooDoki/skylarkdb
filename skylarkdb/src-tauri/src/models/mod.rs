@@ -52,6 +52,12 @@ pub struct MySQLColumn {
     pub is_geometry: bool,
     pub enum_values: Option<Vec<String>>,
     pub max_length: Option<String>,
+    /// 外键引用的表（如有）
+    #[serde(default)]
+    pub referenced_table: Option<String>,
+    /// 外键引用的列（如有）
+    #[serde(default)]
+    pub referenced_column: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

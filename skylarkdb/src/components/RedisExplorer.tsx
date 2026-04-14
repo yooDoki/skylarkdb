@@ -390,8 +390,8 @@ export function RedisExplorer() {
   return (
     <div className="h-full flex overflow-hidden">
       {/* Keys Sidebar */}
-      <div className="w-60 flex-shrink-0 flex flex-col border-r border-border/50 bg-muted/20">
-        <div className="flex-shrink-0 px-3 py-2 border-b border-border/50 space-y-2">
+      <div className="w-60 flex-shrink-0 flex flex-col border-r border-border/60 bg-muted/25 dark:border-border dark:bg-muted/45">
+        <div className="flex-shrink-0 space-y-2 border-b border-border/60 px-3 py-2 dark:border-border/80">
           <div className="flex items-center gap-1.5">
             <Server className="h-3.5 w-3.5 text-redis" />
             <span className="text-sm font-medium">Keys</span>
@@ -472,7 +472,7 @@ export function RedisExplorer() {
           </div>
 
           {isSelectMode && selectedKeys.size > 0 && (
-            <div className="flex gap-1 pt-1.5 border-t border-border/50">
+            <div className="flex gap-1 border-t border-border/60 pt-1.5 dark:border-border/80">
               <Button
                 size="sm"
                 variant="ghost"
@@ -644,7 +644,7 @@ export function RedisExplorer() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Info Bar */}
         {redisInfo && (
-          <div className="flex-shrink-0 border-b border-border/50 px-4 py-2">
+          <div className="flex-shrink-0 border-b border-border/60 bg-background/80 px-4 py-2 backdrop-blur-[2px] dark:border-border/80">
             <div className="grid grid-cols-4 gap-4">
               <div className="flex items-center gap-2">
                 <Zap className="h-3.5 w-3.5 text-redis" />
@@ -681,7 +681,7 @@ export function RedisExplorer() {
         {selectedKey && (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Key Header */}
-            <div className="flex-shrink-0 border-b border-border/50 px-4 py-2 flex items-center justify-between">
+            <div className="flex flex-shrink-0 items-center justify-between border-b border-border/60 bg-background/80 px-4 py-2 backdrop-blur-[2px] dark:border-border/80">
               <div className="flex items-center gap-2 min-w-0">
                 {getTypeIcon(keys.find(k => k.key === selectedKey)?.type || 'string')}
                 <div className="min-w-0">
@@ -690,7 +690,12 @@ export function RedisExplorer() {
                     {getTypeBadge(keys.find(k => k.key === selectedKey)?.type || 'string')}
                     <span>{formatBytes(keys.find(k => k.key === selectedKey)?.size || 0)}</span>
                     {isReadOnly && (
-                      <Badge variant="outline" className="text-[9px] h-4 border-amber-300 text-amber-600">只读</Badge>
+                      <Badge
+                        variant="outline"
+                        className="h-4 text-[9px] border-amber-300 text-amber-700 dark:border-amber-500/45 dark:bg-amber-500/10 dark:text-amber-400"
+                      >
+                        只读
+                      </Badge>
                     )}
                   </div>
                 </div>

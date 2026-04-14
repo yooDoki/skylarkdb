@@ -10,10 +10,25 @@ import {
   DialogTitle,
   DialogDescription,
 } from './ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import { UpdateChecker } from './UpdateChecker';
-import { Settings, Cpu, Monitor, Heart } from 'lucide-react';
+import { useSettings, type ThemeMode } from '@/hooks/useSettings';
+import { Settings, Cpu, Monitor, Heart, Palette } from 'lucide-react';
+
+const themeLabels: Record<ThemeMode, string> = {
+  light: '浅色',
+  dark: '深色',
+  system: '跟随系统',
+};
 
 export function SettingsDialog() {
+  const { settings, updateSetting } = useSettings();
   const [open, setOpen] = useState(false);
   const [appVersion, setAppVersion] = useState('');
   const [prefetchedUpdate, setPrefetchedUpdate] = useState<Update | null>(null);
@@ -78,18 +93,47 @@ export function SettingsDialog() {
                   <DialogTitle className="text-[17px] font-semibold tracking-tight">
                     设置
                   </DialogTitle>
-                  <DialogDescription className="text-xs mt-0.5">
-                    应用信息与更新检查
+                  <DialogDescription className="mt-0.5 text-xs">
+                    外观、应用信息与更新
                   </DialogDescription>
                 </div>
               </div>
             </DialogHeader>
           </div>
 
-          <div className="space-y-5 px-5 py-5 max-h-[60vh] overflow-y-auto">
+          <div className="max-h-[60vh] space-y-5 overflow-y-auto px-5 py-5">
+            {/* 外观 */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+                <Palette className="h-3.5 w-3.5 text-muted-foreground" />
+                外观
+              </Label>
+              <div className="rounded-lg border border-border/70 bg-background/80 p-3 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-sm text-muted-foreground">主题</span>
+                  <Select
+                    value={settings.theme}
+                    onValueChange={v => updateSetting('theme', v as ThemeMode)}
+                  >
+                    <SelectTrigger className="h-9 w-full sm:w-[200px]">
+                      <SelectValue placeholder="选择主题" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">{themeLabels.light}</SelectItem>
+                      <SelectItem value="dark">{themeLabels.dark}</SelectItem>
+                      <SelectItem value="system">{themeLabels.system}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  「跟随系统」会随 macOS / Windows 深浅色自动切换，并同步标题栏样式。
+                </p>
+              </div>
+            </div>
+
             {/* 应用信息 */}
             <div className="space-y-2">
-              <Label className="text-[13px] font-semibold text-foreground flex items-center gap-1.5">
+              <Label className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
                 <Monitor className="h-3.5 w-3.5 text-muted-foreground" />
                 应用信息
               </Label>
@@ -111,7 +155,7 @@ export function SettingsDialog() {
 
             {/* 更新检查 */}
             <div className="space-y-2">
-              <Label className="text-[13px] font-semibold text-foreground flex items-center gap-1.5">
+              <Label className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
                 <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
                 更新
               </Label>
@@ -127,7 +171,7 @@ export function SettingsDialog() {
 
             {/* 致谢 */}
             <div className="space-y-2">
-              <Label className="text-[13px] font-semibold text-foreground flex items-center gap-1.5">
+              <Label className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
                 <Heart className="h-3.5 w-3.5 text-muted-foreground" />
                 致谢
               </Label>

@@ -584,6 +584,36 @@ pub async fn get_columns(
 
     set_default_database(connection_id, &database_name).await;
 
+    // Fetch foreign key metadata for this table (non-fatal: failure should not block column loading)
+    use std::collections::HashMap;
+    let mut fk_map: HashMap<String, (String, String)> = HashMap::new();
+    match sqlx::query_as::<_, (String, Option<String>, Option<String>, Option<String>)>(
+        "SELECT column_name, referenced_table_name, referenced_column_name, constraint_name
+         FROM information_schema.KEY_COLUMN_USAGE
+         WHERE table_schema = ? AND table_name = ?
+         AND referenced_table_name IS NOT NULL
+         AND referenced_column_name IS NOT NULL
+         ORDER BY ordinal_position"
+    )
+    .bind(&database_name)
+    .bind(table_name)
+    .fetch_all(&pool)
+    .await
+    {
+        Ok(fk_rows) => {
+            for (col_name, ref_table, ref_col, _constraint) in fk_rows {
+                if let Some(rt) = ref_table {
+                    if let Some(rc) = ref_col {
+                        fk_map.insert(col_name, (rt, rc));
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Warning: Failed to get foreign keys for {}.{}: {}", database_name, table_name, e);
+        }
+    }
+
     let rows = sqlx::query_as::<_, (String, String, String, Option<String>, Option<String>, String, Option<String>, Option<String>, String)>(
         "SELECT column_name, data_type, is_nullable, column_default, extra, column_type, character_set_name, collation_name, column_key
          FROM information_schema.columns
@@ -639,6 +669,12 @@ pub async fn get_columns(
 
                 let max_length = extract_max_length(&full_type);
 
+                // Look up foreign key info for this column
+                let (referenced_table, referenced_column) = fk_map
+                    .get(&name)
+                    .map(|(rt, rc)| (Some(rt.clone()), Some(rc.clone())))
+                    .unwrap_or((None, None));
+
                 MySQLColumn {
                     name,
                     full_type,
@@ -655,6 +691,8 @@ pub async fn get_columns(
                     is_geometry,
                     enum_values,
                     max_length,
+                    referenced_table,
+                    referenced_column,
                 }
             },
         )

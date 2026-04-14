@@ -68,6 +68,14 @@ export function UpdateChecker({ initialUpdate, onUpdateAvailableChange }: Update
         setCheckResult({ type: 'error', text: '检查超时，请稍后重试' });
       } else if (msg.includes('network') || msg.includes('fetch') || msg.includes('Failed') || msg.includes('Could not fetch')) {
         setCheckResult({ type: 'error', text: '网络连接失败，请检查网络后重试' });
+      } else if (
+        msg.includes('relative URL without a base') ||
+        msg.includes('RelativeUrlWithoutBase')
+      ) {
+        setCheckResult({
+          type: 'error',
+          text: '更新信息无效：发布端 latest.json 中某平台下载地址为空。请等待维护者重新发布更新索引，或到 GitHub Release 手动下载安装包。',
+        });
       } else if (msg.includes('release JSON') || msg.toLowerCase().includes('json')) {
         setCheckResult({ type: 'error', text: '更新信息解析失败（发布端 latest.json 可能不符合格式）' });
       } else {

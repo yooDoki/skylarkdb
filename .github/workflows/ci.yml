@@ -68,6 +68,10 @@ jobs:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: ${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || '' }}
           releaseDraft: false
+          # 由下方 update-latest-json 统一生成并上传 latest.json，避免多矩阵任务合并写入
+          # 产生占位符 url、与专用任务竞态覆盖等问题。
+          uploadUpdaterJson: false
+          uploadUpdaterSignatures: true
 
   update-latest-json:
     name: Update latest.json
@@ -98,6 +102,13 @@ jobs:
 
           RELEASE_ASSETS_JSON="$(gh release view ${{ steps.get_version.outputs.tag }} --json assets)"
 
+          SIG_COUNT="$(echo "$RELEASE_ASSETS_JSON" | jq '[.assets[].name | select(test("\\.sig$"))] | length')"
+          if [ "${SIG_COUNT:-0}" -eq 0 ]; then
+            echo "ERROR: Release has no *.sig assets. Ensure TAURI_SIGNING_PRIVATE_KEY is set in build job and uploadUpdaterSignatures is true." >&2
+            echo "$RELEASE_ASSETS_JSON" | jq -r '.assets[].name' >&2 || true
+            exit 1
+          fi
+
           # Prefer deterministic matching by filename tokens, not "first match".
           # We match both the payload asset and its .sig sidecar.
           # gh release view --json assets exposes download URL as .url (not GitHub API's .browser_download_url)
@@ -125,7 +136,9 @@ jobs:
               echo ""
               return 0
             fi
-            curl -fsSL "$sig_url" | tr -d '\n\r'
+            local out
+            out="$(curl -fsSL "$sig_url" 2>/dev/null | tr -d '\n\r')" || out=""
+            echo "$out"
           }
 
           export_pair() {
@@ -152,11 +165,43 @@ jobs:
           export_pair "darwin_aarch64" "(^|/)SkylarkDB_.*(aarch64|arm64).*\\.app\\.tar\\.gz$" "(^|/)SkylarkDB_.*(aarch64|arm64).*\\.app\\.tar\\.gz\\.sig$"
           export_pair "darwin_x86_64" "(^|/)SkylarkDB_(?!.*aarch64)(?!.*arm64).*(x86_64|amd64|_x64\\.).*\\.app\\.tar\\.gz$" "(^|/)SkylarkDB_(?!.*aarch64)(?!.*arm64).*(x86_64|amd64|_x64\\.).*\\.app\\.tar\\.gz\\.sig$"
 
-          # Windows prefer MSI; common: SkylarkDB_0.2.0_x64_en-US.msi
-          export_pair "windows_x86_64" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.msi$" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.msi\\.sig$"
+          # Windows：先 MSI（与 WiX 捆绑一致），无有效签名时再试 NSIS（如 SkylarkDB_*_x64-setup.exe）
+          win_payload_url=""
+          win_sig_raw=""
+          win_asset_name=""
+          win_sig_asset_name=""
+          try_windows_msi() {
+            win_payload_url="$(get_url_by_name_regex '(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.msi$' || true)"
+            local sigu
+            sigu="$(get_url_by_name_regex '(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.msi\\.sig$' || true)"
+            win_sig_raw="$(read_sig_from_url "$sigu")"
+            win_asset_name="$(get_name_by_url_regex '(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.msi$' || true)"
+            win_sig_asset_name="$(get_name_by_url_regex '(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.msi\\.sig$' || true)"
+          }
+          try_windows_nsis() {
+            win_payload_url="$(get_url_by_name_regex '(^|/)SkylarkDB_.*[-_]setup\\.exe$' || true)"
+            local sigu
+            sigu="$(get_url_by_name_regex '(^|/)SkylarkDB_.*[-_]setup\\.exe\\.sig$' || true)"
+            win_sig_raw="$(read_sig_from_url "$sigu")"
+            win_asset_name="$(get_name_by_url_regex '(^|/)SkylarkDB_.*[-_]setup\\.exe$' || true)"
+            win_sig_asset_name="$(get_name_by_url_regex '(^|/)SkylarkDB_.*[-_]setup\\.exe\\.sig$' || true)"
+          }
+          try_windows_msi
+          if [ -z "$win_sig_raw" ] || [ -z "$win_payload_url" ] || [ "$win_payload_url" = "null" ]; then
+            try_windows_nsis
+          fi
+          if [ -n "$win_payload_url" ] && [ "$win_payload_url" != "null" ] && [ -n "$win_sig_raw" ]; then
+            echo "windows_x86_64_url=$win_payload_url" >> "$GITHUB_OUTPUT"
+            echo "windows_x86_64_signature=$win_sig_raw" >> "$GITHUB_OUTPUT"
+            echo "windows_x86_64_asset_name=$win_asset_name" >> "$GITHUB_OUTPUT"
+            echo "windows_x86_64_sig_asset_name=$win_sig_asset_name" >> "$GITHUB_OUTPUT"
+          fi
 
           # Linux prefer AppImage; common: SkylarkDB_0.2.0_amd64.AppImage
           export_pair "linux_x86_64" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.AppImage$" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.AppImage\\.sig$"
+
+          echo "---- Matched release asset names (debug) ----"
+          echo "$RELEASE_ASSETS_JSON" | jq -r '.assets[].name'
 
       - name: Update latest.json
         run: |
@@ -211,6 +256,11 @@ jobs:
 
           if ! jq -e '.platforms | length > 0' latest.json >/dev/null; then
             echo "ERROR: latest.json has no platforms with non-empty url and signature (nothing to ship)" >&2
+            exit 1
+          fi
+          if ! jq -e '.platforms | to_entries | map(.value | (.url | length > 0) and (.signature | length > 0)) | all' latest.json >/dev/null; then
+            echo "ERROR: latest.json 含空 url 或空 signature，将触发客户端 RelativeUrlWithoutBase / 校验失败" >&2
+            cat latest.json >&2 || true
             exit 1
           fi
 

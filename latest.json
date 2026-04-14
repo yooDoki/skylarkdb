@@ -1,1 +1,0 @@
-{"version": "0.2.1", "notes": "## SkylarkDB v0.2.1\n\n### 新增\n- 更新应用图标为新 logo（蓝色云雀）\n- 修复连接项菜单缺少编辑按钮的问题\n\n### 修复\n- 修复 CI 构建失败问题（TypeScript 未使用变量）", "pub_date": "2026-04-13T21:55:00+08:00", "platforms": {"darwin-aarch64": {"url": "https://github.com/yooDoki/skylarkdb/releases/download/v0.2.1/SkylarkDB_aarch64.app.tar.gz", "signature": ""}}}
