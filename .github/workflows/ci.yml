@@ -65,6 +65,9 @@ jobs:
           projectPath: ./skylarkdb
           includeRelease: ${{ github.ref_type == 'tag' }}
           includeDebug: ${{ github.ref_type != 'tag' }}
+          # Generate updater artifacts (including *.sig) when tagging.
+          # We still generate and upload our own latest.json in update-latest-json.
+          includeUpdaterJson: ${{ github.ref_type == 'tag' }}
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: ${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || '' }}
           releaseDraft: false
