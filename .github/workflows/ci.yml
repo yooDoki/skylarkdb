@@ -100,12 +100,13 @@ jobs:
 
           # Prefer deterministic matching by filename tokens, not "first match".
           # We match both the payload asset and its .sig sidecar.
+          # gh release view --json assets exposes download URL as .url (not GitHub API's .browser_download_url)
           get_url_by_name_regex() {
             local name_regex="$1"
             echo "$RELEASE_ASSETS_JSON" | jq -r --arg re "$name_regex" '
               .assets[]
               | select(.name | test($re))
-              | .browser_download_url
+              | .url
             ' | head -n 1
           }
 
@@ -146,9 +147,10 @@ jobs:
           }
 
           # macOS updater payload is .app.tar.gz. Support both Apple Silicon and Intel if present.
-          # Common names observed: SkylarkDB_aarch64.app.tar.gz / SkylarkDB_x64.app.tar.gz / SkylarkDB_x86_64.app.tar.gz
+          # IMPORTANT: do NOT use plain "x64" alone — it matches inside "aarch64" and will steal the ARM asset for darwin-x86_64.
+          # Common names: SkylarkDB_aarch64.app.tar.gz / SkylarkDB_x64.app.tar.gz / SkylarkDB_*_x86_64.app.tar.gz
           export_pair "darwin_aarch64" "(^|/)SkylarkDB_.*(aarch64|arm64).*\\.app\\.tar\\.gz$" "(^|/)SkylarkDB_.*(aarch64|arm64).*\\.app\\.tar\\.gz\\.sig$"
-          export_pair "darwin_x86_64" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.app\\.tar\\.gz$" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.app\\.tar\\.gz\\.sig$"
+          export_pair "darwin_x86_64" "(^|/)SkylarkDB_(?!.*aarch64)(?!.*arm64).*(x86_64|amd64|_x64\\.).*\\.app\\.tar\\.gz$" "(^|/)SkylarkDB_(?!.*aarch64)(?!.*arm64).*(x86_64|amd64|_x64\\.).*\\.app\\.tar\\.gz\\.sig$"
 
           # Windows prefer MSI; common: SkylarkDB_0.2.0_x64_en-US.msi
           export_pair "windows_x86_64" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.msi$" "(^|/)SkylarkDB_.*(x86_64|x64|amd64).*\\.msi\\.sig$"
@@ -178,31 +180,39 @@ jobs:
             exit 1
           fi
 
-          cat > latest.json << 'EOF'
-          {
-            "version": "${{ steps.get_version.outputs.version }}",
-            "notes": "## SkylarkDB v${{ steps.get_version.outputs.version }}\n\n请查看 Release 页面获取详细更新内容。",
-            "pub_date": "$(date -u '+%Y-%m-%dT%H:%M:%S+00:00')",
-            "platforms": {
-              "darwin-aarch64": {
-                "url": "${{ steps.assets.outputs.darwin_aarch64_url }}",
-                "signature": "${{ steps.assets.outputs.darwin_aarch64_signature }}"
-              },
-              "darwin-x86_64": {
-                "url": "${{ steps.assets.outputs.darwin_x86_64_url }}",
-                "signature": "${{ steps.assets.outputs.darwin_x86_64_signature }}"
-              },
-              "windows-x86_64": {
-                "url": "${{ steps.assets.outputs.windows_x86_64_url }}",
-                "signature": "${{ steps.assets.outputs.windows_x86_64_signature }}"
-              },
-              "linux-x86_64": {
-                "url": "${{ steps.assets.outputs.linux_x86_64_url }}",
-                "signature": "${{ steps.assets.outputs.linux_x86_64_signature }}"
-              }
+          PUB_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          NOTES=$'## SkylarkDB v${{ steps.get_version.outputs.version }}\n\n请查看 Release 页面获取详细更新内容。'
+          jq -n \
+            --arg version "${{ steps.get_version.outputs.version }}" \
+            --arg notes "$NOTES" \
+            --arg pub_date "$PUB_DATE" \
+            --arg darwin_aarch64_url "${{ steps.assets.outputs.darwin_aarch64_url }}" \
+            --arg darwin_aarch64_sig "${{ steps.assets.outputs.darwin_aarch64_signature }}" \
+            --arg darwin_x86_64_url "${{ steps.assets.outputs.darwin_x86_64_url }}" \
+            --arg darwin_x86_64_sig "${{ steps.assets.outputs.darwin_x86_64_signature }}" \
+            --arg windows_x86_64_url "${{ steps.assets.outputs.windows_x86_64_url }}" \
+            --arg windows_x86_64_sig "${{ steps.assets.outputs.windows_x86_64_signature }}" \
+            --arg linux_x86_64_url "${{ steps.assets.outputs.linux_x86_64_url }}" \
+            --arg linux_x86_64_sig "${{ steps.assets.outputs.linux_x86_64_signature }}" \
+            '
+            {
+              version: $version,
+              notes: $notes,
+              pub_date: $pub_date,
+              platforms: (
+                {}
+                | if (($darwin_aarch64_url | length) > 0 and ($darwin_aarch64_sig | length) > 0) then .["darwin-aarch64"] = { url: $darwin_aarch64_url, signature: $darwin_aarch64_sig } else . end
+                | if (($darwin_x86_64_url | length) > 0 and ($darwin_x86_64_sig | length) > 0) then .["darwin-x86_64"] = { url: $darwin_x86_64_url, signature: $darwin_x86_64_sig } else . end
+                | if (($windows_x86_64_url | length) > 0 and ($windows_x86_64_sig | length) > 0) then .["windows-x86_64"] = { url: $windows_x86_64_url, signature: $windows_x86_64_sig } else . end
+                | if (($linux_x86_64_url | length) > 0 and ($linux_x86_64_sig | length) > 0) then .["linux-x86_64"] = { url: $linux_x86_64_url, signature: $linux_x86_64_sig } else . end
+              )
             }
-          }
-          EOF
+            ' > latest.json
+
+          if ! jq -e '.platforms | length > 0' latest.json >/dev/null; then
+            echo "ERROR: latest.json has no platforms with non-empty url and signature (nothing to ship)" >&2
+            exit 1
+          fi
 
       - name: Upload latest.json to Release
         env:
