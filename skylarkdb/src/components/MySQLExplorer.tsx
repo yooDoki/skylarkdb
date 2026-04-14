@@ -859,7 +859,7 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
 
   // 点击外键值时跳转到关联表
   const handleForeignKeyClick = useCallback(
-    (referencedTableName: string, fkValue: unknown) => {
+    (referencedTableName: string, _fkValue: unknown) => {
       if (pendingTable) {
         if (abortControllerRef.current) {
           abortControllerRef.current.abort();
@@ -1504,12 +1504,11 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                               <button
                                                 className="flex cursor-pointer items-center gap-1 transition-colors hover:text-blue-600 dark:hover:text-blue-400"
                                                 title={`外键: ${col} → ${columnMeta.referencedTable}.${columnMeta.referencedColumn || 'id'}`}
-                                                onClick={() =>
-                                                  handleForeignKeyClick(
-                                                    columnMeta.referencedTable,
-                                                    row[col]
-                                                  )
-                                                }
+                                                onClick={() => {
+                                                  const referencedTable = columnMeta.referencedTable;
+                                                  if (!referencedTable) return;
+                                                  handleForeignKeyClick(referencedTable, row[col]);
+                                                }}
                                               >
                                                 <Link2 className="h-3 w-3 flex-shrink-0 text-blue-400" />
                                                 {renderCellContent(row[col])}
@@ -1691,12 +1690,11 @@ export function MySQLExplorer({ onReconnect }: MySQLExplorerProps) {
                                       <button
                                         className="flex cursor-pointer items-center gap-1 transition-colors hover:text-blue-600 dark:hover:text-blue-400"
                                         title={`外键: ${col} → ${columnMeta.referencedTable}.${columnMeta.referencedColumn || 'id'}`}
-                                        onClick={() =>
-                                          handleForeignKeyClick(
-                                            columnMeta.referencedTable,
-                                            row[col]
-                                          )
-                                        }
+                                        onClick={() => {
+                                          const referencedTable = columnMeta.referencedTable;
+                                          if (!referencedTable) return;
+                                          handleForeignKeyClick(referencedTable, row[col]);
+                                        }}
                                       >
                                         <Link2 className="h-3 w-3 flex-shrink-0 text-blue-400" />
                                         {renderCellContent(row[col])}

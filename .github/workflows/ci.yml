@@ -68,10 +68,7 @@ jobs:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: ${{ github.ref_type == 'tag' && format('Release {0}', github.ref_name) || '' }}
           releaseDraft: false
-          # 由下方 update-latest-json 统一生成并上传 latest.json，避免多矩阵任务合并写入
-          # 产生占位符 url、与专用任务竞态覆盖等问题。
-          uploadUpdaterJson: false
-          uploadUpdaterSignatures: true
+          # latest.json 由下方 update-latest-json 统一生成并上传到 Release。
 
   update-latest-json:
     name: Update latest.json
@@ -104,7 +101,7 @@ jobs:
 
           SIG_COUNT="$(echo "$RELEASE_ASSETS_JSON" | jq '[.assets[].name | select(test("\\.sig$"))] | length')"
           if [ "${SIG_COUNT:-0}" -eq 0 ]; then
-            echo "ERROR: Release has no *.sig assets. Ensure TAURI_SIGNING_PRIVATE_KEY is set in build job and uploadUpdaterSignatures is true." >&2
+            echo "ERROR: Release has no *.sig assets. Ensure TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD are set in build job." >&2
             echo "$RELEASE_ASSETS_JSON" | jq -r '.assets[].name' >&2 || true
             exit 1
           fi

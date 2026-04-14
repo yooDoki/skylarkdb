@@ -587,13 +587,13 @@ pub async fn get_columns(
     // Fetch foreign key metadata for this table (non-fatal: failure should not block column loading)
     use std::collections::HashMap;
     let mut fk_map: HashMap<String, (String, String)> = HashMap::new();
-    match sqlx::query_as::<_, (String, Option<String>, Option<String>, Option<String>)>(
+    match sqlx::query_as::<_, (String, String, String, Option<String>)>(
         "SELECT column_name, referenced_table_name, referenced_column_name, constraint_name
          FROM information_schema.KEY_COLUMN_USAGE
          WHERE table_schema = ? AND table_name = ?
          AND referenced_table_name IS NOT NULL
          AND referenced_column_name IS NOT NULL
-         ORDER BY ordinal_position"
+         ORDER BY ordinal_position",
     )
     .bind(&database_name)
     .bind(table_name)
@@ -602,15 +602,14 @@ pub async fn get_columns(
     {
         Ok(fk_rows) => {
             for (col_name, ref_table, ref_col, _constraint) in fk_rows {
-                if let Some(rt) = ref_table {
-                    if let Some(rc) = ref_col {
-                        fk_map.insert(col_name, (rt, rc));
-                    }
-                }
+                fk_map.insert(col_name, (ref_table, ref_col));
             }
         }
         Err(e) => {
-            eprintln!("Warning: Failed to get foreign keys for {}.{}: {}", database_name, table_name, e);
+            eprintln!(
+                "Warning: Failed to get foreign keys for {}.{}: {}",
+                database_name, table_name, e
+            );
         }
     }
 
